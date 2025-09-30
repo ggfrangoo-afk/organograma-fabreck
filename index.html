@@ -941,7 +941,7 @@
             let confirmCallback = null;
             
             // Variáveis do Firebase
-            let db, auth, userId = null;
+            let db, auth;
             let unsubscribe; // Para o listener do Firestore
             let syncStatus = 'idle'; // idle, syncing, synced, error
 
@@ -1040,25 +1040,21 @@
 
             // --- Funções CRUD e Firebase ---
             function getDocRef() {
-                // Robustly get and sanitize the App ID
                 let appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
-                // Firestore document IDs must not contain slashes or be empty.
                 appId = appId.replace(/[.\/]/g, '_'); 
                 if (!appId) appId = 'default-app-id';
-
+                const userId = auth.currentUser?.uid;
                 if (!userId) {
-                    console.error("UserID is not available. Cannot build database path.");
-                    updateSyncStatus('error', 'ID de utilizador inválido');
+                    console.error("Utilizador não autenticado, não é possível obter a referência do documento.");
                     return null;
                 }
-                
                 return doc(db, `artifacts/${appId}/users/${userId}/organograma/main`);
             }
 
             async function saveDataToFirestore() {
                 if (!db) return;
                 const docRef = getDocRef();
-                if (!docRef) return; // Stop if the path is invalid
+                if (!docRef) return;
                 
                 updateSyncStatus('syncing', 'Sincronizando...');
                 try {
@@ -1068,7 +1064,7 @@
                         logData: JSON.stringify(log)
                     };
                     await setDoc(docRef, dataToSave);
-                    // O onSnapshot vai atualizar o status para "Salvo"
+                    showMessage("Dados salvos na nuvem com sucesso.", "success");
                 } catch (error) {
                     console.error("Erro ao salvar dados: ", error);
                     updateSyncStatus('error', 'Erro ao salvar');
@@ -1299,7 +1295,7 @@
             async function loadAndSyncData() {
                 updateSyncStatus('syncing', 'Conectando...');
                 const docRef = getDocRef();
-                if (!docRef) return; // Stop if path is invalid
+                if (!docRef) return; 
 
                 unsubscribe = onSnapshot(docRef, (snapshot) => {
                     if (snapshot.exists()) {
@@ -1309,13 +1305,12 @@
                         log = JSON.parse(data.logData || '[]');
                         updateSyncStatus('synced', 'Salvo na nuvem');
                     } else {
-                        // Documento não existe, usar dados iniciais e salvar
                         factories = JSON.parse(JSON.stringify(initialFactoriesData));
                         hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
                         log = JSON.parse(JSON.stringify(initialLogData));
-                        saveDataToFirestore(); // Cria o documento inicial
+                        saveDataToFirestore(); 
                     }
-                    renderApp(); // Renderiza a UI com os dados mais recentes
+                    renderApp(); 
                 }, (error) => {
                     console.error("Erro no listener do Firestore:", error);
                     updateSyncStatus('error', 'Erro de conexão');
@@ -1332,7 +1327,6 @@
             async function init() {
                 logoContainer.innerHTML = `<svg viewBox="0 0 200 50" class="w-full h-auto" fill="currentColor"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg>`;
                 
-                // Inicialização do Firebase
                 try {
                     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
                     if (!firebaseConfig) {
@@ -1343,11 +1337,11 @@
                     db = getFirestore(app);
                     auth = getAuth(app);
 
-                    const userCredential = typeof __initial_auth_token !== 'undefined'
-                        ? await signInWithCustomToken(auth, __initial_auth_token)
-                        : await signInAnonymously(auth);
-                    
-                    userId = userCredential.user.uid;
+                    if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
 
                     if (localStorage.getItem('isAdminLoggedIn') === 'true') isAdminLoggedIn = true;
 
@@ -1356,7 +1350,6 @@
                     console.error("Falha na inicialização do Firebase:", error);
                     updateSyncStatus('error', 'Falha na inicialização');
                     showMessage("Não foi possível iniciar a sincronização com a nuvem.", "error");
-                    // Carregar dados locais como fallback
                     factories = JSON.parse(JSON.stringify(initialFactoriesData));
                     hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
                     log = JSON.parse(JSON.stringify(initialLogData));
