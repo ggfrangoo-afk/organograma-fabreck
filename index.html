@@ -941,7 +941,7 @@
             let confirmCallback = null;
             
             // Variáveis do Firebase
-            let db, auth;
+            let db, auth, userId = null;
             let unsubscribe; // Para o listener do Firestore
             let syncStatus = 'idle'; // idle, syncing, synced, error
 
@@ -1039,13 +1039,29 @@
             };
 
             // --- Funções CRUD e Firebase ---
+            function getDocRef() {
+                // Robustly get and sanitize the App ID
+                let appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
+                // Firestore document IDs must not contain slashes or be empty.
+                appId = appId.replace(/[.\/]/g, '_'); 
+                if (!appId) appId = 'default-app-id';
+
+                if (!userId) {
+                    console.error("UserID is not available. Cannot build database path.");
+                    updateSyncStatus('error', 'ID de utilizador inválido');
+                    return null;
+                }
+                
+                return doc(db, `artifacts/${appId}/users/${userId}/organograma/main`);
+            }
+
             async function saveDataToFirestore() {
                 if (!db) return;
+                const docRef = getDocRef();
+                if (!docRef) return; // Stop if the path is invalid
+                
                 updateSyncStatus('syncing', 'Sincronizando...');
                 try {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                    const docRef = doc(db, `/artifacts/${appId}/public/data/organograma/main`);
-                    
                     const dataToSave = {
                         factoriesData: JSON.stringify(factories),
                         hiringNeedsData: JSON.stringify(hiringNeeds),
@@ -1187,13 +1203,6 @@
 
             // --- Funções de Renderização ---
             function renderNavigation() {
-                const adminButtonState = (color) => isAdminLoggedIn ? `bg-${color}-500 hover:bg-${color}-600` : 'bg-gray-500 cursor-not-allowed';
-                let contextButtons = '';
-                if (isAdminLoggedIn && currentView === 'organograma') {
-                    if (factories[currentFactoryId] && currentFactoryId !== 'pneus') {
-                       // O botão foi movido para o conteúdo principal
-                    }
-                }
                 navigationContainer.innerHTML = `
                 <h2 class="text-xl font-semibold mb-4 border-b border-blue-700 pb-2">Fábricas</h2>
                 <ul class="space-y-3">${Object.values(factories).map(f => `<li><button data-factory="${f.id}" class="factory-btn w-full text-left py-2 px-4 rounded-md transition ${currentFactoryId === f.id ? 'bg-blue-700 font-bold' : 'hover:bg-blue-800'}">${f.name}</button></li>`).join('')}</ul>
@@ -1201,7 +1210,6 @@
                 <ul class="space-y-3">
                     <li><button data-action="show-hiring-needs" class="w-full text-left py-2 px-4 rounded-md transition ${currentView === 'hiringNeedsOverview' ? 'bg-orange-600 font-bold' : 'bg-orange-500 hover:bg-orange-600'}">Necessidades Contratação</button></li>
                     <li><button data-action="show-log" class="w-full text-left py-2 px-4 rounded-md transition ${currentView === 'logView' ? 'bg-indigo-600 font-bold' : 'bg-indigo-500 hover:bg-indigo-600'}">Log de Movimentações</button></li>
-                    ${contextButtons}
                 </ul>`;
                 adminLoginSection.classList.toggle('hidden', isAdminLoggedIn);
                 adminLogoutSection.classList.toggle('hidden', !isAdminLoggedIn);
@@ -1289,8 +1297,9 @@
             }
             
             async function loadAndSyncData() {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const docRef = doc(db, `/artifacts/${appId}/public/data/organograma/main`);
+                updateSyncStatus('syncing', 'Conectando...');
+                const docRef = getDocRef();
+                if (!docRef) return; // Stop if path is invalid
 
                 unsubscribe = onSnapshot(docRef, (snapshot) => {
                     if (snapshot.exists()) {
@@ -1334,11 +1343,11 @@
                     db = getFirestore(app);
                     auth = getAuth(app);
 
-                    if (typeof __initial_auth_token !== 'undefined') {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
+                    const userCredential = typeof __initial_auth_token !== 'undefined'
+                        ? await signInWithCustomToken(auth, __initial_auth_token)
+                        : await signInAnonymously(auth);
+                    
+                    userId = userCredential.user.uid;
 
                     if (localStorage.getItem('isAdminLoggedIn') === 'true') isAdminLoggedIn = true;
 
