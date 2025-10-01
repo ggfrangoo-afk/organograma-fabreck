@@ -84,8 +84,14 @@
         }
         
         #sync-status.synced { color: #16a34a; }
-        #sync-status.syncing { color: #f59e0b; }
+        #sync-status.syncing { color: #f59e0b; animation: pulse 1.5s infinite; }
         #sync-status.error { color: #dc2626; }
+        #sync-status.dirty { color: #ca8a04; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
 
 
         /* --- Estilos de Impressão --- */
@@ -625,7 +631,10 @@
             // Variáveis do Firebase
             let db, auth;
             let unsubscribe; // Para o listener do Firestore
-            let syncStatus = 'idle'; // idle, syncing, synced, error
+            let syncStatus = 'idle'; // idle, dirty, syncing, synced, error
+            let isDirty = false;
+            let saveTimeout = null;
+            const SAVE_DELAY = 2500; // 2.5 segundos
 
             // --- Cache de Elementos DOM ---
             const navigationContainer = document.getElementById('navigation-container');
@@ -720,32 +729,35 @@
                 return Array.from(sectors).sort();
             };
 
-            // --- Funções CRUD e Firebase ---
-            function getDocRef(user) {
-                let appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
-                appId = appId.replace(/[.\/]/g, '_'); 
-                if (!appId) appId = 'default-app-id';
-                const userId = user?.uid;
-                if (!userId) {
-                    console.error("Utilizador não autenticado ou UID indisponível, não é possível obter a referência do documento.");
-                    return null;
+            // --- NOVO Sistema de Salvamento ---
+            function scheduleSave() {
+                isDirty = true;
+                updateSyncStatus('dirty', 'Alterações pendentes...');
+                if (saveTimeout) {
+                    clearTimeout(saveTimeout);
                 }
-                return doc(db, `artifacts/${appId}/users/${userId}/organograma/main`);
+                saveTimeout = setTimeout(saveDataToFirestore, SAVE_DELAY);
             }
 
-            async function saveDataToFirestore() {
+            async function saveDataToFirestore(isManual = false) {
+                if (!isDirty && !isManual) return;
+                if (saveTimeout) {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = null;
+                }
                 if (!db || !auth.currentUser) {
-                    showMessage("Não autenticado. Não é possível salvar.", "error");
+                    updateSyncStatus('error', 'Não autenticado');
+                    if (isManual) showMessage("Não autenticado. Não é possível salvar.", "error");
                     return;
                 }
-                const docRef = getDocRef(auth.currentUser);
+                const docRef = getDocRef();
                 if (!docRef) {
                     updateSyncStatus('error', 'Não autenticado');
-                    showMessage("ID do utilizador não encontrado. Não é possível salvar.", "error");
+                    if (isManual) showMessage("ID do utilizador não encontrado. Não é possível salvar.", "error");
                     return;
-                };
-                
-                updateSyncStatus('syncing', 'Sincronizando...');
+                }
+
+                updateSyncStatus('syncing', 'Salvando na nuvem...');
                 try {
                     const dataToSave = {
                         factoriesData: JSON.stringify(factories),
@@ -753,11 +765,14 @@
                         logData: JSON.stringify(log)
                     };
                     await setDoc(docRef, dataToSave);
-                    showMessage("Dados salvos na nuvem com sucesso.", "success");
+                    isDirty = false;
+                    updateSyncStatus('synced', 'Salvo na nuvem');
+                    if (isManual) showMessage("Dados salvos com sucesso.", "success");
                 } catch (error) {
+                    isDirty = true; // Mantém o estado sujo para tentar novamente
                     console.error("Erro ao salvar dados: ", error);
                     updateSyncStatus('error', 'Erro ao salvar');
-                    showMessage("Não foi possível salvar os dados na nuvem.", "error");
+                    if (isManual) showMessage("Não foi possível salvar os dados na nuvem.", "error");
                 }
             }
             
@@ -794,7 +809,7 @@
                 }
                 log.push({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: name, context: contextName });
                 hideModal();
-                await saveDataToFirestore();
+                scheduleSave();
             }
             function handleEditEmployee(factoryId, contextId, sectorName, employeeId) {
                 let employee;
@@ -826,7 +841,6 @@
 
                 let employeeToMove;
                 
-                // Encontrar e remover funcionário do local antigo
                 if (factoryId === 'pneus') {
                     const shift = factories.pneus.shifts.find(s => s.id === contextId);
                     if (shift?.functions?.[oldSectorName]) {
@@ -848,9 +862,8 @@
 
                 if (!employeeToMove) return showMessage("Funcionário original não encontrado para mover.", "error");
                 
-                employeeToMove.name = newName; // Atualizar nome
+                employeeToMove.name = newName;
 
-                // Adicionar funcionário ao novo local
                 if (factoryId === 'pneus') {
                     const shift = factories.pneus.shifts.find(s => s.id === contextId);
                     if (!shift.functions[newSectorName]) shift.functions[newSectorName] = [];
@@ -861,7 +874,7 @@
                 }
                 
                 hideModal();
-                await saveDataToFirestore();
+                scheduleSave();
             }
             function handleTerminateEmployee() {
                 const employeeName = document.getElementById('edit-employee-name').value;
@@ -884,7 +897,7 @@
                             employee.status = 'terminated';
                             log.push({ id: `log-${Date.now()}`, type: 'SAÍDA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: contextName });
                             hideModal();
-                            await saveDataToFirestore();
+                            scheduleSave();
                             
                             setTimeout(() => showConfirmModal('Criar Vaga de Contratação?', `Deseja abrir uma nova vaga para substituir '${employee.name}' no setor '${oldSectorName}'?`,
                                 (createNeed) => { if (createNeed) handleAddHiringNeed({ factoryId, shiftId: contextId, sector: oldSectorName, reasonType: 'Desligamento de Funcionário', employeeToReplace: employee.name, departureDate: new Date().toISOString().split('T')[0] }); }
@@ -911,12 +924,11 @@
                     log.push({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: `Reativado em ${contextName}` });
                     hiringNeeds = hiringNeeds.filter(need => !(need.reasonType === 'Desligamento de Funcionário' && need.employeeToReplace?.toUpperCase() === employee.name.toUpperCase() && need.factoryId === factoryId && need.sector === oldSectorName));
                     hideModal();
-                    await saveDataToFirestore();
+                    scheduleSave();
                     showMessage(`${employee.name} foi reativado com sucesso.`, "success");
                 } else { showMessage("Erro ao encontrar funcionário para reativar.", "error"); }
             }
             
-            // --- Necessidades de Contratação ---
             function handleAddHiringNeed(prefill = {}) {
                 const factoryOptions = Object.values(factories).map(f => `<option value="${f.id}" ${prefill.factoryId === f.id ? 'selected' : ''}>${f.name}</option>`).join('');
                 const modalContent = `<div class="space-y-4 text-left"><div><label class="block text-sm font-medium text-gray-700">Fábrica</label><select id="hiring-need-factory" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${factoryOptions}</select></div><div id="shift-selector-container" class="hidden"><label class="block text-sm font-medium text-gray-700">Turno</label><select id="hiring-need-shift" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"></select></div><div><label class="block text-sm font-medium text-gray-700">Setor (Função)</label><select id="hiring-need-sector" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Selecione</option></select></div><div><label class="block text-sm font-medium text-gray-700">Motivo</label><select id="hiring-need-reasonType" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Selecione</option><option value="Aumento de Produção" ${prefill.reasonType === 'Aumento de Produção' ? 'selected' : ''}>Aumento de Produção</option><option value="Desligamento de Funcionário" ${prefill.reasonType === 'Desligamento de Funcionário' ? 'selected' : ''}>Desligamento</option><option value="Nova Posição" ${prefill.reasonType === 'Nova Posição' ? 'selected' : ''}>Nova Posição</option><option value="Outro" ${prefill.reasonType === 'Outro' ? 'selected' : ''}>Outro</option></select></div><div id="replacement-fields" class="hidden space-y-4"><div><label class="block text-sm font-medium text-gray-700">Substituindo</label><input type="text" id="hiring-need-employeeToReplace" value="${prefill.employeeToReplace || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div><div><label class="block text-sm font-medium text-gray-700">Data Desligamento</label><input type="date" id="hiring-need-departureDate" value="${prefill.departureDate || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div></div><div><label class="block text-sm font-medium text-gray-700">Início Previsto</label><input type="date" id="hiring-need-expectedStartDate" value="${prefill.expectedStartDate || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div><div><label class="block text-sm font-medium text-gray-700">Responsabilidades</label><textarea id="hiring-need-keyResponsibilities" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${prefill.keyResponsibilities || ''}</textarea></div><div><label class="block text-sm font-medium text-gray-700">Observações</label><textarea id="hiring-need-notes" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${prefill.notes || ''}</textarea></div><button data-action="save-new-hiring-need" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Salvar</button></div>`;
@@ -929,14 +941,14 @@
                 if (!newNeed.factoryId || !newNeed.sector || !newNeed.reasonType) return showMessage("Fábrica, Setor e Motivo são obrigatórios.", 'error');
                 hiringNeeds.push(newNeed);
                 hideModal();
-                await saveDataToFirestore();
+                scheduleSave();
             }
 
             // --- Funções de Renderização ---
             function renderNavigation() {
                 navigationContainer.innerHTML = `
                 <h2 class="text-xl font-semibold mb-4 border-b border-blue-700 pb-2">Fábricas</h2>
-                <ul class="space-y-3">${Object.values(factories).map(f => `<li><button data-factory="${f.id}" class="factory-btn w-full text-left py-2 px-4 rounded-md transition ${currentFactoryId === f.id ? 'bg-blue-700 font-bold' : 'hover:bg-blue-800'}">${f.name}</button></li>`).join('')}</ul>
+                <ul class="space-y-3">${Object.keys(factories).length > 0 ? Object.values(factories).map(f => `<li><button data-factory="${f.id}" class="factory-btn w-full text-left py-2 px-4 rounded-md transition ${currentFactoryId === f.id ? 'bg-blue-700 font-bold' : 'hover:bg-blue-800'}">${f.name}</button></li>`).join('') : '<p class="text-blue-300 text-sm px-4">Carregando fábricas...</p>'}</ul>
                 <h2 class="text-xl font-semibold my-4 border-b border-blue-700 pb-2">Vistas</h2>
                 <ul class="space-y-3">
                     <li><button data-action="show-hiring-needs" class="w-full text-left py-2 px-4 rounded-md transition ${currentView === 'hiringNeedsOverview' ? 'bg-orange-600 font-bold' : 'bg-orange-500 hover:bg-orange-600'}">Necessidades Contratação</button></li>
@@ -1028,13 +1040,25 @@
                 }
             }
             
+            function getDocRef(user) {
+                let appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
+                appId = appId.replace(/[.\/]/g, '_');
+                if (!appId) appId = 'default-app-id';
+                const finalUser = user || auth.currentUser;
+                const userId = finalUser?.uid;
+                if (!userId) {
+                    console.error("Utilizador não autenticado ou UID indisponível, não é possível obter a referência do documento.");
+                    return null;
+                }
+                return doc(db, `artifacts/${appId}/users/${userId}/organograma/main`);
+            }
+
             async function loadAndSyncData(user) {
                 updateSyncStatus('syncing', 'Conectando...');
                 const docRef = getDocRef(user);
                 if (!docRef) {
                     updateSyncStatus('error', 'Falha de Auth');
                     showMessage("Não foi possível obter a referência do usuário para carregar os dados.", "error");
-                    // Carrega dados locais como fallback
                     factories = JSON.parse(JSON.stringify(initialFactoriesData));
                     hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
                     log = JSON.parse(JSON.stringify(initialLogData));
@@ -1053,8 +1077,9 @@
                         factories = JSON.parse(JSON.stringify(initialFactoriesData));
                         hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
                         log = JSON.parse(JSON.stringify(initialLogData));
-                        saveDataToFirestore(); 
+                        saveDataToFirestore(true); // Força o salvamento inicial
                     }
+                    isDirty = false; // Reseta o estado 'dirty' ao carregar dados da nuvem
                     renderApp(); 
                 }, (error) => {
                     console.error("Erro no listener do Firestore:", error);
@@ -1079,7 +1104,7 @@
                 adminLoginBtn.addEventListener('click', loginAdmin);
                 adminPasswordInput.addEventListener('keyup', (e) => e.key === 'Enter' && loginAdmin());
                 adminLogoutBtn.addEventListener('click', logoutAdmin);
-                saveCloudBtn.addEventListener('click', saveDataToFirestore);
+                saveCloudBtn.addEventListener('click', () => saveDataToFirestore(true));
                 modalCloseBtn.addEventListener('click', hideModal);
                 document.getElementById('confirm-modal-close-btn').addEventListener('click', hideConfirmModal);
                 document.getElementById('confirm-modal-cancel-btn').addEventListener('click', hideConfirmModal);
@@ -1106,7 +1131,6 @@
                         if (user && !authInitialized) {
                             authInitialized = true;
                             console.log("Usuário autenticado:", user.uid);
-                            updateSyncStatus('syncing', 'Autenticado. Sincronizando...');
                             if (localStorage.getItem('isAdminLoggedIn') === 'true') {
                                 isAdminLoggedIn = true;
                             }
@@ -1132,6 +1156,7 @@
             
             // --- IMPLEMENTAÇÃO DAS FUNÇÕES DE RENDERIZAÇÃO COMPLETAS ---
             function renderAllShiftsOverview(container) {
+                if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const shifts = factories.pneus.shifts;
                 const content = shifts.length > 0 ? `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${shifts.map(shift => {
                 const needsForShift = hiringNeeds.filter(need => need.factoryId === 'pneus' && need.shiftId === shift.id);
@@ -1143,12 +1168,14 @@
             }
 
             function renderFullOrgChart(container) {
+                if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const shifts = factories.pneus.shifts;
                 const orgChartContent = shifts.length > 0 ? `<div class="flex flex-col items-center"><div class="w-full flex flex-col lg:flex-row justify-around items-start gap-8 org-chart-columns">${shifts.map(shift => `<div class="flex flex-col items-center w-full lg:w-1/3 org-chart-column"><div class="bg-blue-800 text-white rounded-lg p-4 shadow-lg text-center w-full max-w-sm mb-4 shift-header"><h3>${shift.name}</h3><p>Responsável: ${shift.responsible}</p></div><div class="w-full space-y-4">${Object.entries(shift.functions).sort((a, b) => a[0].localeCompare(b[0])).map(([func, employees]) => `<div class="sector-card"><h4>${func}</h4><div class="space-y-2">${employees.map(emp => `<div class="employee-card bg-gray-50 rounded shadow-sm p-2 text-center text-sm ${isAdminLoggedIn ? 'cursor-pointer' : ''} ${emp.status === 'terminated' ? 'terminated' : ''}" data-factory-id="pneus" data-context-id="${shift.id}" data-sector-name="${func}" data-employee-id="${emp.id}">${emp.name}</div>`).join('')}</div></div>`).join('')}</div></div>`).join('')}</div></div>` : `<p class="text-center text-gray-500 text-lg">Nenhum turno cadastrado.</p>`;
                 container.innerHTML = `<div class="printable-area"><div class="flex justify-between items-center mb-4 no-print"><h2 class="text-3xl font-bold text-gray-800">Organograma Estruturado</h2><button data-action="print-page" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Imprimir</button></div><div class="print-header hidden"><svg viewBox="0 0 200 50" class="print-logo" fill="black"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg><h2 class="print-title">FABRECK PNEUS</h2></div><div class="w-full overflow-x-auto p-4 org-chart-container">${orgChartContent}</div></div>`;
             }
 
             function renderDetailedShiftView(container) {
+                if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const shift = factories.pneus.shifts.find(s => s.id === selectedShiftId);
                 if (!shift) { currentView = 'organograma'; renderApp(); return; }
 
@@ -1164,6 +1191,7 @@
 
             function renderFactoryOverview(container, factoryId) {
                 const factory = factories[factoryId];
+                if (!factory) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const adminAddButton = isAdminLoggedIn ? `<button data-action="add-employee" data-factory-id="${factoryId}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition">Adicionar Funcionário</button>` : '';
                 const activeEmployeesCount = getActiveEmployees(getAllEmployeesFromFactory(factory)).length;
                 const content = Object.keys(factory.sectors).length > 0 ? `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${Object.entries(factory.sectors).sort((a,b) => a[0].localeCompare(b[0])).map(([sectorName, employees]) => { const needsForSector = hiringNeeds.filter(need => need.factoryId === factoryId && need.sector === sectorName); let hiringNeedsHtml = needsForSector.length > 0 ? `<div class="mt-4 pt-3 border-t border-blue-200"><h4 class="font-bold text-red-600 text-sm mb-1">VAGA EM ABERTO:</h4><ul class="list-disc list-inside text-sm text-red-800">${needsForSector.map(need => `<li>${need.sector}</li>`).join('')}</ul></div>` : ''; const activeSectorEmployees = getActiveEmployees(employees).length; return `<div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500"><h3 class="text-xl font-bold text-blue-800 mb-2">${sectorName}</h3><p class="text-gray-700 mt-2"><span class="font-semibold">Funcionários Ativos:</span> ${activeSectorEmployees}</p>${hiringNeedsHtml}</div>` }).join('')}</div>` : `<p class="text-center text-gray-500 text-lg">Nenhum setor cadastrado.</p>`;
@@ -1172,7 +1200,8 @@
 
             function renderFactoryFullChart(container, factoryId) {
                 const factory = factories[factoryId];
-                 const adminAddButton = isAdminLoggedIn ? `<button data-action="add-employee" data-factory-id="${factoryId}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition">Adicionar Funcionário</button>` : '';
+                if (!factory) { container.innerHTML = '<p>Carregando...</p>'; return; }
+                const adminAddButton = isAdminLoggedIn ? `<button data-action="add-employee" data-factory-id="${factoryId}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition">Adicionar Funcionário</button>` : '';
                 const activeEmployeesCount = getActiveEmployees(getAllEmployeesFromFactory(factory)).length;
                 const topSectorsOrder = ["LÍDER DE PRODUÇÃO", "SUPORTE E ORGANIZAÇÃO", "ORGANIZAÇÃO E QUALIDADE"];
                 const allSectorEntries = Object.entries(factory.sectors);
