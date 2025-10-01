@@ -629,7 +629,7 @@
             let confirmCallback = null;
             
             // Variáveis do Firebase
-            let db, auth;
+            let db, auth, currentUser = null;
             let unsubscribe; // Para o listener do Firestore
             let syncStatus = 'idle'; // idle, dirty, syncing, synced, error
             let isDirty = false;
@@ -736,7 +736,7 @@
                 if (saveTimeout) {
                     clearTimeout(saveTimeout);
                 }
-                saveTimeout = setTimeout(saveDataToFirestore, SAVE_DELAY);
+                saveTimeout = setTimeout(() => saveDataToFirestore(false), SAVE_DELAY);
             }
 
             async function saveDataToFirestore(isManual = false) {
@@ -745,7 +745,7 @@
                     clearTimeout(saveTimeout);
                     saveTimeout = null;
                 }
-                if (!db || !auth.currentUser) {
+                if (!db || !currentUser) {
                     updateSyncStatus('error', 'Não autenticado');
                     if (isManual) showMessage("Não autenticado. Não é possível salvar.", "error");
                     return;
@@ -1040,12 +1040,11 @@
                 }
             }
             
-            function getDocRef(user) {
+            function getDocRef() {
                 let appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
                 appId = appId.replace(/[.\/]/g, '_');
                 if (!appId) appId = 'default-app-id';
-                const finalUser = user || auth.currentUser;
-                const userId = finalUser?.uid;
+                const userId = currentUser?.uid;
                 if (!userId) {
                     console.error("Utilizador não autenticado ou UID indisponível, não é possível obter a referência do documento.");
                     return null;
@@ -1130,11 +1129,15 @@
                     onAuthStateChanged(auth, async (user) => {
                         if (user && !authInitialized) {
                             authInitialized = true;
+                            currentUser = user; // Define o utilizador global
                             console.log("Usuário autenticado:", user.uid);
                             if (localStorage.getItem('isAdminLoggedIn') === 'true') {
                                 isAdminLoggedIn = true;
                             }
                             await loadAndSyncData(user);
+                        } else if (!user) {
+                            currentUser = null;
+                            isAdminLoggedIn = false;
                         }
                     });
 
