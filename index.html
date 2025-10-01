@@ -25,13 +25,14 @@
 
         /* Estilo para funcionários marcados como desligados */
         .employee-card.terminated {
-            color: #b91c1c; /* Vermelho mais escuro */
+            color: #b91c1c;
+            /* Vermelho mais escuro */
             font-weight: 600;
             background-color: #fee2e2;
             text-decoration: line-through;
             opacity: 0.7;
         }
-        
+
         .sub-nav-tabs {
             display: flex;
             justify-content: center;
@@ -52,7 +53,8 @@
         }
 
         .sub-nav-tabs button.active {
-            color: #1e3a8a; /* Azul mais escuro */
+            color: #1e3a8a;
+            /* Azul mais escuro */
             border-bottom-color: #1e3a8a;
             background-color: #ffffff;
         }
@@ -65,14 +67,16 @@
         .sector-card {
             background-color: #ffffff;
             border: 1px solid #e5e7eb;
-            border-top: 4px solid #2563eb; /* Destaque azul */
+            border-top: 4px solid #2563eb;
+            /* Destaque azul */
             border-radius: 0.75rem;
             padding: 1rem;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         }
 
         .sector-card.leader {
-            border-top-color: #c2410c; /* Destaque laranja para líderes */
+            border-top-color: #c2410c;
+            /* Destaque laranja para líderes */
         }
 
         .sector-card h4 {
@@ -82,17 +86,6 @@
             margin-bottom: 0.75rem;
             font-size: 1.125rem;
         }
-        
-        #sync-status.synced { color: #16a34a; }
-        #sync-status.syncing { color: #f59e0b; animation: pulse 1.5s infinite; }
-        #sync-status.error { color: #dc2626; }
-        #sync-status.dirty { color: #ca8a04; }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-
 
         /* --- Estilos de Impressão --- */
         @media print {
@@ -115,7 +108,7 @@
                 text-align: center;
                 margin-bottom: 2rem;
             }
-            
+
             .print-logo {
                 width: 200px;
                 height: auto;
@@ -191,7 +184,7 @@
                 margin-top: 1rem;
                 box-shadow: none !important;
             }
-            
+
             .sector-card.leader {
                 border-top-color: #c2410c !important;
             }
@@ -238,11 +231,6 @@
             </div>
             <div id="admin-logout-section" class="hidden">
                 <p class="text-sm mb-2">Logado como Admin.</p>
-                 <div class="text-center my-2">
-                    <span id="sync-status" class="text-xs font-semibold"></span>
-                </div>
-                <button id="save-cloud-btn"
-                    class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-md transition duration-200 ease-in-out mb-4">Salvar Agora</button>
                 <button id="admin-logout-btn"
                     class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Sair
                     Admin</button>
@@ -295,12 +283,12 @@
     </div>
     
     <script type="module">
-        // Importações do Firebase SDK
+        // Firebase Imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Dados Iniciais (Este bloco será atualizado no download) ---
+        // --- Dados Iniciais (Este bloco será usado para criar o primeiro registro no banco de dados) ---
         const initialFactoriesData = {
             "pneus": {
                 "id": "pneus",
@@ -616,6 +604,11 @@
 
         // Módulo principal da aplicação para organizar o código
         const App = (() => {
+            // --- Firebase State ---
+            let db;
+            let auth;
+            let dataUnsubscribe = null; // To hold the onSnapshot listener
+
             // --- Variáveis de Estado Global ---
             let factories = {};
             let hiringNeeds = [];
@@ -627,15 +620,7 @@
             let isAdminLoggedIn = false;
             const ADMIN_PASSWORD = "FBK123";
             let confirmCallback = null;
-            
-            // Variáveis do Firebase
-            let db, auth, currentUser = null;
-            let unsubscribe; // Para o listener do Firestore
-            let syncStatus = 'idle'; // idle, dirty, syncing, synced, error
-            let isDirty = false;
-            let saveTimeout = null;
-            let isAppReady = false; // Flag de controlo
-            const SAVE_DELAY = 2500; // 2.5 segundos
+            let isAppReady = false;
 
             // --- Cache de Elementos DOM ---
             const navigationContainer = document.getElementById('navigation-container');
@@ -655,9 +640,6 @@
             const adminLoginBtn = document.getElementById('admin-login-btn');
             const adminLogoutBtn = document.getElementById('admin-logout-btn');
             const logoContainer = document.getElementById('logo-container');
-            const syncStatusElement = document.getElementById('sync-status');
-            const saveCloudBtn = document.getElementById('save-cloud-btn');
-
 
             // --- Funções Utilitárias ---
             const showMessage = (message, type = 'success') => {
@@ -684,12 +666,6 @@
                 confirmModalBackdrop.classList.add('hidden');
                 confirmCallback = null;
             };
-            const updateSyncStatus = (status, message) => {
-                syncStatus = status;
-                syncStatusElement.textContent = message;
-                syncStatusElement.className = `text-xs font-semibold ${status}`;
-            };
-
 
             // --- Funções de Admin ---
             const loginAdmin = () => {
@@ -709,11 +685,9 @@
                 showMessage("Logout de administrador bem-sucedido!", 'success');
                 renderApp();
             };
-            
+
             // --- Funções de Ajuda ---
-            const getActiveEmployees = (employeeList = []) => {
-                return employeeList.filter(emp => emp.status === 'active');
-            };
+            const getActiveEmployees = (employeeList = []) => employeeList.filter(emp => emp.status === 'active');
             const getAllEmployeesFromShift = (shift) => Object.values(shift.functions || {}).flat();
             const getAllEmployeesFromFactory = (factory) => {
                 if (!factory) return [];
@@ -730,56 +704,66 @@
                 return Array.from(sectors).sort();
             };
 
-            // --- NOVO Sistema de Salvamento ---
-            function scheduleSave() {
-                if (!isAppReady) return; // Não agendar salvamentos antes da app estar pronta
-                isDirty = true;
-                updateSyncStatus('dirty', 'Alterações pendentes...');
-                if (saveTimeout) {
-                    clearTimeout(saveTimeout);
-                }
-                saveTimeout = setTimeout(() => saveDataToFirestore(false), SAVE_DELAY);
-            }
+            // --- Sistema de Salvamento Firestore ---
+            const getAppDataRef = (appId) => doc(db, 'artifacts', appId, 'public', 'data');
 
-            async function saveDataToFirestore(isManual = false) {
-                if (!isAppReady) return; // Guarda de segurança
-                if (!isDirty && !isManual) return;
-
-                if (saveTimeout) {
-                    clearTimeout(saveTimeout);
-                    saveTimeout = null;
-                }
-                if (!db || !currentUser) {
-                    updateSyncStatus('error', 'Não autenticado');
-                    if (isManual) showMessage("Não autenticado. Não é possível salvar.", "error");
+            async function saveDataToFirestore() {
+                if (!auth.currentUser || !db) {
+                    showMessage("Não autenticado ou o banco de dados não está pronto.", "error");
                     return;
                 }
-                const docRef = getDocRef();
-                if (!docRef) {
-                    updateSyncStatus('error', 'Não autenticado');
-                    if (isManual) showMessage("ID do utilizador não encontrado. Não é possível salvar.", "error");
-                    return;
-                }
-
-                updateSyncStatus('syncing', 'Salvando na nuvem...');
                 try {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    const dataRef = getAppDataRef(appId);
                     const dataToSave = {
-                        factoriesData: JSON.stringify(factories),
-                        hiringNeedsData: JSON.stringify(hiringNeeds),
-                        logData: JSON.stringify(log)
+                        factoriesData: factories,
+                        hiringNeedsData: hiringNeeds,
+                        logData: log
                     };
-                    await setDoc(docRef, dataToSave);
-                    isDirty = false;
-                    updateSyncStatus('synced', 'Salvo na nuvem');
-                    if (isManual) showMessage("Dados salvos com sucesso.", "success");
+                    await setDoc(dataRef, dataToSave);
                 } catch (error) {
-                    isDirty = true; // Mantém o estado sujo para tentar novamente
-                    console.error("Erro ao salvar dados: ", error);
-                    updateSyncStatus('error', 'Erro ao salvar');
-                    if (isManual) showMessage("Não foi possível salvar os dados na nuvem.", "error");
+                    console.error("Erro ao salvar dados no Firestore: ", error);
+                    showMessage("Falha ao salvar os dados na nuvem.", "error");
                 }
             }
-            
+
+            function attachFirestoreListener(appId) {
+                if (dataUnsubscribe) dataUnsubscribe(); // Detach any existing listener
+
+                const dataRef = getAppDataRef(appId);
+
+                dataUnsubscribe = onSnapshot(dataRef, async (docSnap) => {
+                    if (docSnap.exists()) {
+                        console.log("Dados recebidos do Firestore.");
+                        const data = docSnap.data();
+                        factories = data.factoriesData || {};
+                        hiringNeeds = data.hiringNeedsData || [];
+                        log = data.logData || [];
+                    } else {
+                        console.log("Nenhum dado no Firestore. Criando documento inicial.");
+                        factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                        hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                        log = JSON.parse(JSON.stringify(initialLogData));
+                        await saveDataToFirestore(); // Salva os dados iniciais
+                    }
+                    isAppReady = true;
+                    renderApp(); // Renderiza o aplicativo com os novos dados
+                }, (error) => {
+                    console.error("Erro ao escutar o Firestore: ", error);
+                    showMessage("Não foi possível carregar os dados em tempo real. Usando dados locais.", "error");
+                    loadInitialDataAsFallback();
+                });
+            }
+
+            function loadInitialDataAsFallback() {
+                factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                log = JSON.parse(JSON.stringify(initialLogData));
+                isAppReady = true;
+                renderApp();
+            }
+
+            // --- Funções de Manipulação de Dados (CRUD) ---
             function handleAddEmployee(factoryId, contextId = null) {
                 const factory = factories[factoryId];
                 let modalTitleText = `Adicionar Funcionário a ${factory.name}`;
@@ -791,7 +775,7 @@
                 const modalContent = `<div class="space-y-4"><div><label for="add-employee-name" class="block text-sm font-medium text-gray-700">Nome</label><input type="text" id="add-employee-name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div><div><label for="add-employee-sector" class="block text-sm font-medium text-gray-700">Setor/Função</label><input type="text" id="add-employee-sector" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" placeholder="Ex: CALDEIRA" /></div><button data-action="save-new-employee" data-factory-id="${factoryId}" data-context-id="${contextId || ''}" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Salvar</button></div>`;
                 showModal(modalTitleText, modalContent);
             }
-            async function saveNewEmployee(factoryId, contextId) {
+            function saveNewEmployee(factoryId, contextId) {
                 const name = document.getElementById('add-employee-name')?.value.toUpperCase().trim();
                 const sector = document.getElementById('add-employee-sector')?.value.toUpperCase().trim();
                 if (!name || !sector) return showMessage("Nome e setor são obrigatórios.", 'error');
@@ -811,9 +795,9 @@
                     factory.sectors[sector].push(newEmployee);
                     contextName = `${factory.name} / ${sector}`;
                 }
-                log.push({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: name, context: contextName });
+                log.unshift({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: name, context: contextName });
                 hideModal();
-                scheduleSave();
+                saveDataToFirestore();
             }
             function handleEditEmployee(factoryId, contextId, sectorName, employeeId) {
                 let employee;
@@ -839,7 +823,7 @@
                     </div>`;
                 showModal(`Editar ${employee.name}`, modalContent);
             }
-            async function saveEditedEmployee() {
+            function saveEditedEmployee() {
                 const employeeId = document.getElementById('edit-employee-id').value, factoryId = document.getElementById('edit-employee-factory-id').value, contextId = document.getElementById('edit-employee-context-id').value, oldSectorName = document.getElementById('edit-employee-old-sector').value, newName = document.getElementById('edit-employee-name').value.toUpperCase().trim(), newSectorName = document.getElementById('edit-employee-sector').value.toUpperCase().trim();
                 if (!newName || !newSectorName) return showMessage("Nome e setor são obrigatórios.", 'error');
 
@@ -878,12 +862,12 @@
                 }
                 
                 hideModal();
-                scheduleSave();
+                saveDataToFirestore();
             }
             function handleTerminateEmployee() {
                 const employeeName = document.getElementById('edit-employee-name').value;
                 showConfirmModal('Desligar Funcionário', `Tem certeza que deseja marcar '${employeeName}' como desligado?`,
-                    async (confirmed) => {
+                    (confirmed) => {
                         if (!confirmed) return;
                         const employeeId = document.getElementById('edit-employee-id').value, factoryId = document.getElementById('edit-employee-factory-id').value, contextId = document.getElementById('edit-employee-context-id').value, oldSectorName = document.getElementById('edit-employee-old-sector').value;
                         let contextName = '', employee;
@@ -899,9 +883,9 @@
 
                         if (employee) {
                             employee.status = 'terminated';
-                            log.push({ id: `log-${Date.now()}`, type: 'SAÍDA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: contextName });
+                            log.unshift({ id: `log-${Date.now()}`, type: 'SAÍDA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: contextName });
                             hideModal();
-                            scheduleSave();
+                            saveDataToFirestore();
                             
                             setTimeout(() => showConfirmModal('Criar Vaga de Contratação?', `Deseja abrir uma nova vaga para substituir '${employee.name}' no setor '${oldSectorName}'?`,
                                 (createNeed) => { if (createNeed) handleAddHiringNeed({ factoryId, shiftId: contextId, sector: oldSectorName, reasonType: 'Desligamento de Funcionário', employeeToReplace: employee.name, departureDate: new Date().toISOString().split('T')[0] }); }
@@ -910,7 +894,7 @@
                     }
                 );
             }
-            async function handleReactivateEmployee() {
+            function handleReactivateEmployee() {
                 const employeeId = document.getElementById('edit-employee-id').value, factoryId = document.getElementById('edit-employee-factory-id').value, contextId = document.getElementById('edit-employee-context-id').value, oldSectorName = document.getElementById('edit-employee-old-sector').value;
                 let contextName = '', employee;
 
@@ -925,14 +909,13 @@
 
                 if (employee) {
                     employee.status = 'active';
-                    log.push({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: `Reativado em ${contextName}` });
+                    log.unshift({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: `Reativado em ${contextName}` });
                     hiringNeeds = hiringNeeds.filter(need => !(need.reasonType === 'Desligamento de Funcionário' && need.employeeToReplace?.toUpperCase() === employee.name.toUpperCase() && need.factoryId === factoryId && need.sector === oldSectorName));
                     hideModal();
-                    scheduleSave();
+                    saveDataToFirestore();
                     showMessage(`${employee.name} foi reativado com sucesso.`, "success");
                 } else { showMessage("Erro ao encontrar funcionário para reativar.", "error"); }
             }
-            
             function handleAddHiringNeed(prefill = {}) {
                 const factoryOptions = Object.values(factories).map(f => `<option value="${f.id}" ${prefill.factoryId === f.id ? 'selected' : ''}>${f.name}</option>`).join('');
                 const modalContent = `<div class="space-y-4 text-left"><div><label class="block text-sm font-medium text-gray-700">Fábrica</label><select id="hiring-need-factory" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${factoryOptions}</select></div><div id="shift-selector-container" class="hidden"><label class="block text-sm font-medium text-gray-700">Turno</label><select id="hiring-need-shift" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"></select></div><div><label class="block text-sm font-medium text-gray-700">Setor (Função)</label><select id="hiring-need-sector" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Selecione</option></select></div><div><label class="block text-sm font-medium text-gray-700">Motivo</label><select id="hiring-need-reasonType" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Selecione</option><option value="Aumento de Produção" ${prefill.reasonType === 'Aumento de Produção' ? 'selected' : ''}>Aumento de Produção</option><option value="Desligamento de Funcionário" ${prefill.reasonType === 'Desligamento de Funcionário' ? 'selected' : ''}>Desligamento</option><option value="Nova Posição" ${prefill.reasonType === 'Nova Posição' ? 'selected' : ''}>Nova Posição</option><option value="Outro" ${prefill.reasonType === 'Outro' ? 'selected' : ''}>Outro</option></select></div><div id="replacement-fields" class="hidden space-y-4"><div><label class="block text-sm font-medium text-gray-700">Substituindo</label><input type="text" id="hiring-need-employeeToReplace" value="${prefill.employeeToReplace || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div><div><label class="block text-sm font-medium text-gray-700">Data Desligamento</label><input type="date" id="hiring-need-departureDate" value="${prefill.departureDate || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div></div><div><label class="block text-sm font-medium text-gray-700">Início Previsto</label><input type="date" id="hiring-need-expectedStartDate" value="${prefill.expectedStartDate || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div><div><label class="block text-sm font-medium text-gray-700">Responsabilidades</label><textarea id="hiring-need-keyResponsibilities" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${prefill.keyResponsibilities || ''}</textarea></div><div><label class="block text-sm font-medium text-gray-700">Observações</label><textarea id="hiring-need-notes" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${prefill.notes || ''}</textarea></div><button data-action="save-new-hiring-need" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Salvar</button></div>`;
@@ -940,12 +923,12 @@
                 document.getElementById('hiring-need-factory').dispatchEvent(new Event('change'));
                 if(prefill.sector) document.getElementById('hiring-need-sector').value = prefill.sector;
             }
-            async function handleSaveNewHiringNeed() {
+            function handleSaveNewHiringNeed() {
                 const newNeed = { id: `need-${Date.now()}`, factoryId: document.getElementById('hiring-need-factory').value, shiftId: document.getElementById('hiring-need-shift').value || null, sector: document.getElementById('hiring-need-sector').value, reasonType: document.getElementById('hiring-need-reasonType').value, employeeToReplace: document.getElementById('hiring-need-employeeToReplace').value, departureDate: document.getElementById('hiring-need-departureDate').value, expectedStartDate: document.getElementById('hiring-need-expectedStartDate').value, keyResponsibilities: document.getElementById('hiring-need-keyResponsibilities').value, notes: document.getElementById('hiring-need-notes').value };
                 if (!newNeed.factoryId || !newNeed.sector || !newNeed.reasonType) return showMessage("Fábrica, Setor e Motivo são obrigatórios.", 'error');
                 hiringNeeds.push(newNeed);
                 hideModal();
-                scheduleSave();
+                saveDataToFirestore();
             }
 
             // --- Funções de Renderização ---
@@ -1011,7 +994,7 @@
                 } else if (action === 'print-page') window.print();
                 else if (isAdminLoggedIn && target.classList.contains('employee-card')) handleEditEmployee(factoryId, contextId, sectorName, employeeId);
                 else if (isAdminLoggedIn && action === 'add-hiring-need') handleAddHiringNeed();
-                 else if (isAdminLoggedIn && action === 'add-employee') {
+                else if (isAdminLoggedIn && action === 'add-employee') {
                     handleAddEmployee(factoryId, contextId);
                 }
             }
@@ -1043,141 +1026,70 @@
                     document.getElementById('replacement-fields').classList.toggle('hidden', document.getElementById('hiring-need-reasonType').value !== 'Desligamento de Funcionário');
                 }
             }
-            
-            function getDocRef() {
-                let appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
-                appId = appId.replace(/[.\/]/g, '_');
-                if (!appId) appId = 'default-app-id';
-                const userId = currentUser?.uid;
-                if (!userId) {
-                    console.error("Utilizador não autenticado ou UID indisponível, não é possível obter a referência do documento.");
-                    return null;
-                }
-                return doc(db, `artifacts/${appId}/users/${userId}/organograma/main`);
-            }
-
-            async function loadAndSyncData(user) {
-                updateSyncStatus('syncing', 'Conectando...');
-                const docRef = getDocRef(user);
-                if (!docRef) {
-                    updateSyncStatus('error', 'Falha de Auth');
-                    showMessage("Não foi possível obter a referência do usuário para carregar os dados.", "error");
-                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                    log = JSON.parse(JSON.stringify(initialLogData));
-                    renderApp();
-                    return;
-                }
-
-                unsubscribe = onSnapshot(docRef, (snapshot) => {
-                    if (snapshot.exists()) {
-                        const data = snapshot.data();
-                        factories = JSON.parse(data.factoriesData || '{}');
-                        hiringNeeds = JSON.parse(data.hiringNeedsData || '[]');
-                        log = JSON.parse(data.logData || '[]');
-                        updateSyncStatus('synced', 'Salvo na nuvem');
-                    } else {
-                        factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                        hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                        log = JSON.parse(JSON.stringify(initialLogData));
-                        saveDataToFirestore(true); // Força o salvamento inicial
-                    }
-                    isDirty = false; // Reseta o estado 'dirty' ao carregar dados da nuvem
-                    isAppReady = true; // App está pronta
-                    renderApp(); 
-                }, (error) => {
-                    console.error("Erro no listener do Firestore:", error);
-                    updateSyncStatus('error', 'Erro de conexão');
-                    showMessage("Não foi possível conectar à nuvem. Verifique sua conexão.", "error");
-                    isAppReady = true; // App está pronta, mas em modo offline
-                });
-            }
-
 
             function renderApp() {
+                if(!isAppReady) {
+                    mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-gray-600 animate-pulse">Conectando ao banco de dados...</p></div>`;
+                    return;
+                }
                 renderNavigation();
                 renderMainContent();
             }
 
-            async function init() {
-                logoContainer.innerHTML = `<svg viewBox="0 0 200 50" class="w-full h-auto" fill="currentColor"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg>`;
-                
-                navigationContainer.addEventListener('click', handleNavClick);
-                mainContentArea.addEventListener('click', handleMainContentClick);
-                modalBody.addEventListener('click', handleModalEvents);
-                modalBody.addEventListener('change', handleModalEvents);
-                adminLoginBtn.addEventListener('click', loginAdmin);
-                adminPasswordInput.addEventListener('keyup', (e) => e.key === 'Enter' && loginAdmin());
-                adminLogoutBtn.addEventListener('click', logoutAdmin);
-                saveCloudBtn.addEventListener('click', () => saveDataToFirestore(true));
-                modalCloseBtn.addEventListener('click', hideModal);
-                document.getElementById('confirm-modal-close-btn').addEventListener('click', hideConfirmModal);
-                document.getElementById('confirm-modal-cancel-btn').addEventListener('click', hideConfirmModal);
-                confirmModalOkBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(true); hideConfirmModal(); });
+            function initializeFirebase() {
+                 try {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    // The __firebase_config is expected to be a JSON string.
+                    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
 
-                const loadOfflineDataAndRender = () => {
-                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                    log = JSON.parse(JSON.stringify(initialLogData));
-                    isAppReady = true;
-                    renderApp();
-                };
-
-                try {
-                    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-                    if (!firebaseConfig) throw new Error("Configuração do Firebase não encontrada.");
+                    if (!firebaseConfig.apiKey || appId === 'default-app-id') {
+                        console.warn("Firebase config is missing or app ID is default. Falling back to initial data.");
+                        showMessage("Configuração do Firebase ausente. Usando dados locais.", "error");
+                        loadInitialDataAsFallback();
+                        return;
+                    }
 
                     const app = initializeApp(firebaseConfig);
                     db = getFirestore(app);
                     auth = getAuth(app);
 
-                    let authInitialized = false;
-
                     onAuthStateChanged(auth, async (user) => {
                         if (user) {
-                           if (!authInitialized) {
-                                authInitialized = true;
-                                currentUser = user;
-                                console.log("Usuário autenticado:", user.uid);
-                                if (localStorage.getItem('isAdminLoggedIn') === 'true') {
-                                    isAdminLoggedIn = true;
-                                }
-                                await loadAndSyncData(user);
-                           }
+                            console.log("Usuário autenticado:", user.uid);
+                            attachFirestoreListener(appId);
                         } else {
-                            // Se não houver utilizador (raro com login anónimo, mas seguro de tratar)
-                            currentUser = null;
-                            isAdminLoggedIn = false;
-                            updateSyncStatus('error', 'Não autenticado');
-                            loadOfflineDataAndRender();
+                            console.log("Nenhum usuário. Tentando login...");
+                            try {
+                                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                                if (token) {
+                                    await signInWithCustomToken(auth, token);
+                                } else {
+                                    await signInAnonymously(auth);
+                                }
+                            } catch (error) {
+                                console.error("Erro durante o login:", error);
+                                showMessage("Falha na autenticação. Usando dados locais.", "error");
+                                loadInitialDataAsFallback();
+                            }
                         }
                     });
 
-                    updateSyncStatus('syncing', 'Autenticando...');
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
                 } catch (error) {
-                    console.error("Falha na inicialização ou autenticação do Firebase:", error);
-                    updateSyncStatus('error', 'Falha na Conexão');
-                    showMessage("Não foi possível conectar à nuvem. O app está em modo offline.", "error");
-                    loadOfflineDataAndRender();
+                    console.error("Inicialização do Firebase falhou:", error);
+                    showMessage("Erro ao iniciar o Firebase. Usando dados locais.", "error");
+                    loadInitialDataAsFallback();
                 }
             }
 
-            window.addEventListener('DOMContentLoaded', init);
-            
             // --- IMPLEMENTAÇÃO DAS FUNÇÕES DE RENDERIZAÇÃO COMPLETAS ---
             function renderAllShiftsOverview(container) {
                 if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const shifts = factories.pneus.shifts;
                 const content = shifts.length > 0 ? `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${shifts.map(shift => {
-                const needsForShift = hiringNeeds.filter(need => need.factoryId === 'pneus' && need.shiftId === shift.id);
-                let hiringNeedsHtml = needsForShift.length > 0 ? `<div class="mt-4 pt-3 border-t border-blue-200"><h4 class="font-bold text-red-600 text-sm mb-1">VAGA EM ABERTO:</h4><ul class="list-disc list-inside text-sm text-red-800">${needsForShift.map(need => `<li>${need.sector}</li>`).join('')}</ul></div>` : '';
-                const activeEmployeeCount = getActiveEmployees(getAllEmployeesFromShift(shift)).length;
-                return `<div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500"><h3 class="text-xl font-bold text-blue-800 mb-2">${shift.name}</h3><p class="text-gray-700"><span class="font-semibold">Responsável:</span> ${shift.responsible}</p><p class="text-gray-700"><span class="font-semibold">Horário:</span> ${shift.time}</p><p class="text-gray-700 mt-2"><span class="font-semibold">Funcionários Ativos:</span> ${activeEmployeeCount}</p>${hiringNeedsHtml}<button data-action="view-shift-details" data-shift-id="${shift.id}" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition">Ver Detalhes</button></div>`
+                    const needsForShift = hiringNeeds.filter(need => need.factoryId === 'pneus' && need.shiftId === shift.id);
+                    let hiringNeedsHtml = needsForShift.length > 0 ? `<div class="mt-4 pt-3 border-t border-blue-200"><h4 class="font-bold text-red-600 text-sm mb-1">VAGA EM ABERTO:</h4><ul class="list-disc list-inside text-sm text-red-800">${needsForShift.map(need => `<li>${need.sector}</li>`).join('')}</ul></div>` : '';
+                    const activeEmployeeCount = getActiveEmployees(getAllEmployeesFromShift(shift)).length;
+                    return `<div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500"><h3 class="text-xl font-bold text-blue-800 mb-2">${shift.name}</h3><p class="text-gray-700"><span class="font-semibold">Responsável:</span> ${shift.responsible}</p><p class="text-gray-700"><span class="font-semibold">Horário:</span> ${shift.time}</p><p class="text-gray-700 mt-2"><span class="font-semibold">Funcionários Ativos:</span> ${activeEmployeeCount}</p>${hiringNeedsHtml}<button data-action="view-shift-details" data-shift-id="${shift.id}" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition">Ver Detalhes</button></div>`
                 }).join('')}</div>` : `<p class="text-center text-gray-500 text-lg">Nenhum turno cadastrado.</p>`;
                 container.innerHTML = `<div class="printable-area"><div class="flex justify-between items-center mb-4 no-print"><h2 class="text-3xl font-bold text-gray-800">Resumo de Todos os Turnos</h2><button data-action="print-page" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Imprimir</button></div><div class="print-header hidden"><svg viewBox="0 0 200 50" class="print-logo" fill="black"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg><h2 class="print-title">FABRECK PNEUS - RESUMO DE TURNOS</h2></div>${content}</div>`;
             }
@@ -1192,7 +1104,11 @@
             function renderDetailedShiftView(container) {
                 if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const shift = factories.pneus.shifts.find(s => s.id === selectedShiftId);
-                if (!shift) { currentView = 'organograma'; renderApp(); return; }
+                if (!shift) { 
+                    currentView = 'organograma'; 
+                    renderApp(); 
+                    return; 
+                }
 
                 const adminAddButton = isAdminLoggedIn
                     ? `<button data-action="add-employee" data-factory-id="pneus" data-context-id="${shift.id}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition">Adicionar Funcionário</button>`
@@ -1234,15 +1150,47 @@
             }
 
             function renderLogView(container) {
-                const sortedLog = [...log].sort((a, b) => new Date(b.date.split('/').reverse().join('-')) - new Date(a.date.split('/').reverse().join('-')));
+                const sortedLog = [...log].sort((a, b) => {
+                    const dateA = new Date(a.date.split('/').reverse().join('-')).getTime();
+                    const dateB = new Date(b.date.split('/').reverse().join('-')).getTime();
+                    if (isNaN(dateA) || isNaN(dateB)) return 0; // handle invalid dates
+                    return dateB - dateA;
+                });
                 const content = sortedLog.length > 0 ? `<div class="overflow-x-auto"><table class="min-w-full bg-white rounded-lg shadow"><thead class="bg-gray-200"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Funcionário</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Local</th></tr></thead><tbody class="divide-y divide-gray-200">${sortedLog.map(entry => `<tr><td class="px-6 py-4 whitespace-nowrap">${entry.date}</td><td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.type === 'ENTRADA' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${entry.type}</span></td><td class="px-6 py-4 whitespace-nowrap font-medium">${entry.employeeName}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${entry.context}</td></tr>`).join('')}</tbody></table></div>` : `<p class="text-center text-gray-500 text-lg">Nenhum registro de movimentação encontrado.</p>`;
                 container.innerHTML = `<div class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 lg:p-10 mx-auto"><h2 class="text-3xl font-bold text-gray-800 mb-8 text-center">Log de Movimentações</h2>${content}</div>`;
             }
-            
-            window.addEventListener('DOMContentLoaded', init);
-        })();
-    </script>
 
+            function init() {
+                logoContainer.innerHTML = `<svg viewBox="0 0 200 50" class="w-full h-auto" fill="currentColor"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg>`;
+                
+                navigationContainer.addEventListener('click', handleNavClick);
+                mainContentArea.addEventListener('click', handleMainContentClick);
+                modalBody.addEventListener('click', handleModalEvents);
+                modalBody.addEventListener('change', handleModalEvents);
+                adminLoginBtn.addEventListener('click', loginAdmin);
+                adminPasswordInput.addEventListener('keyup', (e) => e.key === 'Enter' && loginAdmin());
+                adminLogoutBtn.addEventListener('click', logoutAdmin);
+                
+                modalCloseBtn.addEventListener('click', hideModal);
+                document.getElementById('confirm-modal-close-btn').addEventListener('click', hideConfirmModal);
+                document.getElementById('confirm-modal-cancel-btn').addEventListener('click', hideConfirmModal);
+                confirmModalOkBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(true); hideConfirmModal(); });
+                
+                if (localStorage.getItem('isAdminLoggedIn') === 'true') {
+                    isAdminLoggedIn = true;
+                }
+                
+                initializeFirebase();
+            }
+
+            // Public init function
+            return { init };
+        })();
+
+        // --- Start the application ---
+        App.init();
+
+    </script>
 </body>
 </html>
 
