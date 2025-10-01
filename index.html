@@ -10,6 +10,7 @@
     <!-- Google Fonts - Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
         rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* Estilos gerais e de componentes */
         body {
@@ -235,6 +236,7 @@
                     class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Sair
                     Admin</button>
             </div>
+             <div id="syncStatus" class="text-center text-xs mt-4 p-2 rounded-md">A ligar...</div>
         </div>
     </nav>
 
@@ -283,11 +285,6 @@
     </div>
     
     <script type="module">
-        // Firebase Imports
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
         // --- Dados Iniciais (Este bloco será usado para criar o primeiro registro no banco de dados) ---
         const initialFactoriesData = {
             "pneus": {
@@ -604,11 +601,6 @@
 
         // Módulo principal da aplicação para organizar o código
         const App = (() => {
-            // --- Firebase State ---
-            let db;
-            let auth;
-            let dataUnsubscribe = null; // To hold the onSnapshot listener
-
             // --- Variáveis de Estado Global ---
             let factories = {};
             let hiringNeeds = [];
@@ -621,6 +613,11 @@
             const ADMIN_PASSWORD = "FBK123";
             let confirmCallback = null;
             let isAppReady = false;
+
+            // --- Estado de Sincronização ---
+            const FIXED_SYNC_KEY = '1695844053634035713'; // Chave para o JSONBlob
+            const NEEDS_SYNC_KEY = 'fabreck_organograma_needs_sync';
+            let syncDebounceTimer = null;
 
             // --- Cache de Elementos DOM ---
             const navigationContainer = document.getElementById('navigation-container');
@@ -640,6 +637,54 @@
             const adminLoginBtn = document.getElementById('admin-login-btn');
             const adminLogoutBtn = document.getElementById('admin-logout-btn');
             const logoContainer = document.getElementById('logo-container');
+
+             // --- IndexedDB Helper ---
+            const dbPromise = new Promise((resolve, reject) => {
+                const request = indexedDB.open('FabreckOrganogramaDB_v1', 1);
+
+                request.onerror = (event) => {
+                    console.error("Erro ao abrir IndexedDB:", event.target.error);
+                    reject("Erro de base de dados");
+                };
+
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('organogramaData')) {
+                        db.createObjectStore('organogramaData', { keyPath: 'key' });
+                    }
+                     if (!db.objectStoreNames.contains('settings')) {
+                        db.createObjectStore('settings', { keyPath: 'key' });
+                    }
+                };
+
+                request.onsuccess = (event) => {
+                    console.log("Base de dados local aberta com sucesso.");
+                    resolve(event.target.result);
+                };
+            });
+
+            const dbManager = {
+                async get(storeName, key) {
+                    const db = await dbPromise;
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction(storeName, 'readonly');
+                        const store = transaction.objectStore(storeName);
+                        const request = store.get(key);
+                        request.onsuccess = () => resolve(request.result);
+                        request.onerror = (event) => reject(event.target.error);
+                    });
+                },
+                async set(storeName, value) {
+                    const db = await dbPromise;
+                    return new Promise((resolve, reject) => {
+                        const transaction = db.transaction(storeName, 'readwrite');
+                        const store = transaction.objectStore(storeName);
+                        store.put(value);
+                        transaction.oncomplete = () => resolve();
+                        transaction.onerror = (event) => reject(event.target.error);
+                    });
+                }
+            };
 
             // --- Funções Utilitárias ---
             const showMessage = (message, type = 'success') => {
@@ -703,64 +748,136 @@
                 else if (factory.sectors) Object.keys(factory.sectors || {}).forEach(sector => sectors.add(sector));
                 return Array.from(sectors).sort();
             };
-
-            // --- Sistema de Salvamento Firestore ---
-            const getAppDataRef = (appId) => doc(db, 'artifacts', appId, 'public', 'data');
-
-            async function saveDataToFirestore() {
-                if (!auth.currentUser || !db) {
-                    showMessage("Não autenticado ou o banco de dados não está pronto.", "error");
-                    return;
-                }
-                try {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                    const dataRef = getAppDataRef(appId);
-                    const dataToSave = {
-                        factoriesData: factories,
-                        hiringNeedsData: hiringNeeds,
-                        logData: log
-                    };
-                    await setDoc(dataRef, dataToSave);
-                } catch (error) {
-                    console.error("Erro ao salvar dados no Firestore: ", error);
-                    showMessage("Falha ao salvar os dados na nuvem.", "error");
-                }
-            }
-
-            function attachFirestoreListener(appId) {
-                if (dataUnsubscribe) dataUnsubscribe(); // Detach any existing listener
-
-                const dataRef = getAppDataRef(appId);
-
-                dataUnsubscribe = onSnapshot(dataRef, async (docSnap) => {
-                    if (docSnap.exists()) {
-                        console.log("Dados recebidos do Firestore.");
-                        const data = docSnap.data();
-                        factories = data.factoriesData || {};
-                        hiringNeeds = data.hiringNeedsData || [];
-                        log = data.logData || [];
-                    } else {
-                        console.log("Nenhum dado no Firestore. Criando documento inicial.");
-                        factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                        hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                        log = JSON.parse(JSON.stringify(initialLogData));
-                        await saveDataToFirestore(); // Salva os dados iniciais
-                    }
-                    isAppReady = true;
-                    renderApp(); // Renderiza o aplicativo com os novos dados
-                }, (error) => {
-                    console.error("Erro ao escutar o Firestore: ", error);
-                    showMessage("Não foi possível carregar os dados em tempo real. Usando dados locais.", "error");
-                    loadInitialDataAsFallback();
+            
+            // --- Sistema de Salvamento e Sincronização ---
+            async function saveData() {
+                 await dbManager.set('organogramaData', { 
+                    key: 'main', 
+                    value: { 
+                        factories, 
+                        hiringNeeds, 
+                        log 
+                    },
+                    savedAt: new Date().toISOString()
                 });
+                triggerAutoSync();
+                renderApp(); // Re-render to reflect changes immediately
             }
 
-            function loadInitialDataAsFallback() {
-                factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                log = JSON.parse(JSON.stringify(initialLogData));
-                isAppReady = true;
-                renderApp();
+            function triggerAutoSync() {
+                if (navigator.onLine) {
+                    const syncStatus = document.getElementById('syncStatus');
+                    syncStatus.textContent = 'A guardar alterações...';
+                    syncStatus.style.color = '#F39C12';
+                    clearTimeout(syncDebounceTimer);
+                    syncDebounceTimer = setTimeout(() => saveToCloud(true), 2500);
+                } else {
+                    updateOnlineStatus();
+                    dbManager.set('settings', { key: NEEDS_SYNC_KEY, value: true });
+                    showMessage('Offline. Alterações salvas localmente.', 'info');
+                }
+            }
+            
+            async function saveToCloud(isSilent = false) {
+                const syncStatus = document.getElementById('syncStatus');
+                if (!isSilent) syncStatus.textContent = 'A sincronizar...';
+                try {
+                    const dataToSave = await dbManager.get('organogramaData', 'main');
+                    if (!dataToSave) return; // No data to save
+
+                    const response = await fetch(`https://jsonblob.com/api/jsonBlob/${FIXED_SYNC_KEY}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(dataToSave.value) // Send only the value object
+                    });
+                    if (!response.ok) throw new Error(`Erro no servidor: ${response.statusText}`);
+
+                    syncStatus.textContent = `Sincronizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+                    syncStatus.style.color = '#2ECC71';
+                    if (!isSilent) showMessage('Dados salvos na nuvem!', 'success');
+                    await dbManager.set('settings', { key: NEEDS_SYNC_KEY, value: false });
+                } catch (error) {
+                    syncStatus.textContent = 'Erro de sincronização';
+                    syncStatus.style.color = '#E74C3C';
+                    showMessage('Falha ao sincronizar os dados. Verifique a sua ligação.', 'error');
+                }
+            }
+            
+            async function loadFromCloud(isSilent = false) {
+                 const syncStatus = document.getElementById('syncStatus');
+                if (!isSilent) syncStatus.textContent = 'A carregar da nuvem...';
+                try {
+                    const response = await fetch(`https://jsonblob.com/api/jsonBlob/${FIXED_SYNC_KEY}`);
+                    if (!response.ok) throw new Error(response.status === 404 ? 'Nenhum backup na nuvem.' : `Erro no servidor: ${response.statusText}`);
+                    const cloudData = await response.json();
+                     if (!cloudData || !cloudData.factories) throw new Error('Dados da nuvem inválidos.');
+
+                    const localData = await dbManager.get('organogramaData', 'main');
+                    const localLastUpdate = localData ? new Date(localData.savedAt).getTime() : 0;
+                    
+                    // Simple check: if cloud has data and local doesn't, or if cloud is different.
+                    // A more robust check would use timestamps. For now, this is safer.
+                    if (JSON.stringify(cloudData) !== JSON.stringify(localData?.value)) {
+                         await applyCloudData(cloudData);
+                    } else {
+                        if (!isSilent) showMessage('Os seus dados locais estão atualizados.', 'info');
+                        updateOnlineStatus();
+                    }
+
+                } catch (error) {
+                     if (!isSilent) showMessage(`Falha ao carregar: ${error.message}`, 'error');
+                    updateOnlineStatus();
+                }
+            }
+
+            async function applyCloudData(cloudData) {
+                 await dbManager.set('organogramaData', { 
+                    key: 'main', 
+                    value: cloudData,
+                    savedAt: new Date().toISOString() // Update timestamp to reflect sync time
+                });
+                await loadFromDB();
+                updateUI();
+                
+                const syncStatus = document.getElementById('syncStatus');
+                syncStatus.textContent = `Sincronizado em ${new Date().toLocaleString('pt-BR')}`;
+                syncStatus.style.color = '#2ECC71';
+                showMessage('Dados carregados da nuvem!', 'success');
+            }
+
+            function updateOnlineStatus() {
+                const syncStatus = document.getElementById('syncStatus');
+                if (navigator.onLine) {
+                    syncStatus.textContent = 'Online';
+                    syncStatus.style.color = '#2ECC71';
+                } else {
+                    syncStatus.textContent = 'Offline - A trabalhar localmente';
+                    syncStatus.style.color = '#E74C3C';
+                }
+            }
+            
+            async function autoSyncOfflineChanges() {
+                updateOnlineStatus();
+                const needsSync = await dbManager.get('settings', NEEDS_SYNC_KEY);
+                if (needsSync?.value) {
+                    showMessage('Conexão restaurada. A sincronizar alterações...', 'info');
+                    await saveToCloud(false);
+                }
+            }
+            
+            async function loadFromDB() {
+                const data = await dbManager.get('organogramaData', 'main');
+                if (data && data.value) {
+                    factories = data.value.factories || {};
+                    hiringNeeds = data.value.hiringNeeds || [];
+                    log = data.value.log || [];
+                } else {
+                    // First time load
+                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                    log = JSON.parse(JSON.stringify(initialLogData));
+                    await saveData(); // Save initial data to DB and trigger first sync
+                }
             }
 
             // --- Funções de Manipulação de Dados (CRUD) ---
@@ -797,7 +914,7 @@
                 }
                 log.unshift({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: name, context: contextName });
                 hideModal();
-                saveDataToFirestore();
+                saveData();
             }
             function handleEditEmployee(factoryId, contextId, sectorName, employeeId) {
                 let employee;
@@ -862,13 +979,12 @@
                 }
                 
                 hideModal();
-                saveDataToFirestore();
+                saveData();
             }
             function handleTerminateEmployee() {
                 const employeeName = document.getElementById('edit-employee-name').value;
                 showConfirmModal('Desligar Funcionário', `Tem certeza que deseja marcar '${employeeName}' como desligado?`,
-                    (confirmed) => {
-                        if (!confirmed) return;
+                    () => {
                         const employeeId = document.getElementById('edit-employee-id').value, factoryId = document.getElementById('edit-employee-factory-id').value, contextId = document.getElementById('edit-employee-context-id').value, oldSectorName = document.getElementById('edit-employee-old-sector').value;
                         let contextName = '', employee;
 
@@ -885,10 +1001,10 @@
                             employee.status = 'terminated';
                             log.unshift({ id: `log-${Date.now()}`, type: 'SAÍDA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: contextName });
                             hideModal();
-                            saveDataToFirestore();
+                            saveData();
                             
                             setTimeout(() => showConfirmModal('Criar Vaga de Contratação?', `Deseja abrir uma nova vaga para substituir '${employee.name}' no setor '${oldSectorName}'?`,
-                                (createNeed) => { if (createNeed) handleAddHiringNeed({ factoryId, shiftId: contextId, sector: oldSectorName, reasonType: 'Desligamento de Funcionário', employeeToReplace: employee.name, departureDate: new Date().toISOString().split('T')[0] }); }
+                                () => { handleAddHiringNeed({ factoryId, shiftId: contextId, sector: oldSectorName, reasonType: 'Desligamento de Funcionário', employeeToReplace: employee.name, departureDate: new Date().toISOString().split('T')[0] }); }
                             ), 100);
                         } else { showMessage("Erro ao encontrar funcionário para desligar.", "error"); }
                     }
@@ -912,7 +1028,7 @@
                     log.unshift({ id: `log-${Date.now()}`, type: 'ENTRADA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: `Reativado em ${contextName}` });
                     hiringNeeds = hiringNeeds.filter(need => !(need.reasonType === 'Desligamento de Funcionário' && need.employeeToReplace?.toUpperCase() === employee.name.toUpperCase() && need.factoryId === factoryId && need.sector === oldSectorName));
                     hideModal();
-                    saveDataToFirestore();
+                    saveData();
                     showMessage(`${employee.name} foi reativado com sucesso.`, "success");
                 } else { showMessage("Erro ao encontrar funcionário para reativar.", "error"); }
             }
@@ -928,7 +1044,7 @@
                 if (!newNeed.factoryId || !newNeed.sector || !newNeed.reasonType) return showMessage("Fábrica, Setor e Motivo são obrigatórios.", 'error');
                 hiringNeeds.push(newNeed);
                 hideModal();
-                saveDataToFirestore();
+                saveData();
             }
 
             // --- Funções de Renderização ---
@@ -1029,58 +1145,23 @@
 
             function renderApp() {
                 if(!isAppReady) {
-                    mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-gray-600 animate-pulse">Conectando ao banco de dados...</p></div>`;
+                    mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-gray-600 animate-pulse">A carregar dados locais...</p></div>`;
                     return;
                 }
                 renderNavigation();
                 renderMainContent();
             }
 
-            function initializeFirebase() {
-                 try {
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                    // The __firebase_config is expected to be a JSON string.
-                    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-
-                    if (!firebaseConfig.apiKey || appId === 'default-app-id') {
-                        console.warn("Firebase config is missing or app ID is default. Falling back to initial data.");
-                        showMessage("Configuração do Firebase ausente. Usando dados locais.", "error");
-                        loadInitialDataAsFallback();
-                        return;
-                    }
-
-                    const app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-
-                    onAuthStateChanged(auth, async (user) => {
-                        if (user) {
-                            console.log("Usuário autenticado:", user.uid);
-                            attachFirestoreListener(appId);
-                        } else {
-                            console.log("Nenhum usuário. Tentando login...");
-                            try {
-                                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                                if (token) {
-                                    await signInWithCustomToken(auth, token);
-                                } else {
-                                    await signInAnonymously(auth);
-                                }
-                            } catch (error) {
-                                console.error("Erro durante o login:", error);
-                                showMessage("Falha na autenticação. Usando dados locais.", "error");
-                                loadInitialDataAsFallback();
-                            }
-                        }
-                    });
-
-                } catch (error) {
-                    console.error("Inicialização do Firebase falhou:", error);
-                    showMessage("Erro ao iniciar o Firebase. Usando dados locais.", "error");
-                    loadInitialDataAsFallback();
-                }
+            async function initializeAppData() {
+                showModal('A carregar...', 'A carregar dados da aplicação. Por favor, aguarde.');
+                await loadFromDB();
+                updateUI();
+                hideModal();
+                isAppReady = true;
+                renderApp(); // Renderiza a UI com dados locais primeiro
+                loadFromCloud(true); // Tenta carregar da nuvem em segundo plano
             }
-
+            
             // --- IMPLEMENTAÇÃO DAS FUNÇÕES DE RENDERIZAÇÃO COMPLETAS ---
             function renderAllShiftsOverview(container) {
                 if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
@@ -1160,6 +1241,12 @@
                 container.innerHTML = `<div class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 lg:p-10 mx-auto"><h2 class="text-3xl font-bold text-gray-800 mb-8 text-center">Log de Movimentações</h2>${content}</div>`;
             }
 
+            function updateUI() {
+                if(!isAppReady) return;
+                renderNavigation();
+                renderMainContent();
+            }
+
             function init() {
                 logoContainer.innerHTML = `<svg viewBox="0 0 200 50" class="w-full h-auto" fill="currentColor"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg>`;
                 
@@ -1174,13 +1261,16 @@
                 modalCloseBtn.addEventListener('click', hideModal);
                 document.getElementById('confirm-modal-close-btn').addEventListener('click', hideConfirmModal);
                 document.getElementById('confirm-modal-cancel-btn').addEventListener('click', hideConfirmModal);
-                confirmModalOkBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(true); hideConfirmModal(); });
+                confirmModalOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(true); confirmCallback = null; } hideConfirmModal(); });
                 
                 if (localStorage.getItem('isAdminLoggedIn') === 'true') {
                     isAdminLoggedIn = true;
                 }
                 
-                initializeFirebase();
+                window.addEventListener('online', autoSyncOfflineChanges);
+                window.addEventListener('offline', updateOnlineStatus);
+                
+                initializeAppData();
             }
 
             // Public init function
