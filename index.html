@@ -721,21 +721,24 @@
             };
 
             // --- Funções CRUD e Firebase ---
-            function getDocRef() {
+            function getDocRef(user) {
                 let appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'default-app-id';
                 appId = appId.replace(/[.\/]/g, '_'); 
                 if (!appId) appId = 'default-app-id';
-                const userId = auth.currentUser?.uid;
+                const userId = user?.uid;
                 if (!userId) {
-                    console.error("Utilizador não autenticado, não é possível obter a referência do documento.");
+                    console.error("Utilizador não autenticado ou UID indisponível, não é possível obter a referência do documento.");
                     return null;
                 }
                 return doc(db, `artifacts/${appId}/users/${userId}/organograma/main`);
             }
 
             async function saveDataToFirestore() {
-                if (!db) return;
-                const docRef = getDocRef();
+                if (!db || !auth.currentUser) {
+                    showMessage("Não autenticado. Não é possível salvar.", "error");
+                    return;
+                }
+                const docRef = getDocRef(auth.currentUser);
                 if (!docRef) {
                     updateSyncStatus('error', 'Não autenticado');
                     showMessage("ID do utilizador não encontrado. Não é possível salvar.", "error");
@@ -1025,12 +1028,17 @@
                 }
             }
             
-            async function loadAndSyncData() {
+            async function loadAndSyncData(user) {
                 updateSyncStatus('syncing', 'Conectando...');
-                const docRef = getDocRef();
-                if (!docRef) { // Verificação extra de segurança
+                const docRef = getDocRef(user);
+                if (!docRef) {
                     updateSyncStatus('error', 'Falha de Auth');
                     showMessage("Não foi possível obter a referência do usuário para carregar os dados.", "error");
+                    // Carrega dados locais como fallback
+                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                    log = JSON.parse(JSON.stringify(initialLogData));
+                    renderApp();
                     return;
                 }
 
@@ -1064,7 +1072,6 @@
             async function init() {
                 logoContainer.innerHTML = `<svg viewBox="0 0 200 50" class="w-full h-auto" fill="currentColor"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg>`;
                 
-                // Anexa os listeners da UI imediatamente.
                 navigationContainer.addEventListener('click', handleNavClick);
                 mainContentArea.addEventListener('click', handleMainContentClick);
                 modalBody.addEventListener('click', handleModalEvents);
@@ -1093,16 +1100,17 @@
                     db = getFirestore(app);
                     auth = getAuth(app);
 
+                    let authInitialized = false;
+
                     onAuthStateChanged(auth, async (user) => {
-                        if (user) {
-                             if (syncStatus !== 'synced') { // Apenas carrega se não estiver já sincronizado
-                                console.log("Usuário autenticado:", user.uid);
-                                updateSyncStatus('syncing', 'Autenticado. Sincronizando...');
-                                if (localStorage.getItem('isAdminLoggedIn') === 'true') {
-                                    isAdminLoggedIn = true;
-                                }
-                                await loadAndSyncData();
+                        if (user && !authInitialized) {
+                            authInitialized = true;
+                            console.log("Usuário autenticado:", user.uid);
+                            updateSyncStatus('syncing', 'Autenticado. Sincronizando...');
+                            if (localStorage.getItem('isAdminLoggedIn') === 'true') {
+                                isAdminLoggedIn = true;
                             }
+                            await loadAndSyncData(user);
                         }
                     });
 
