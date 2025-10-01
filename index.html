@@ -634,6 +634,7 @@
             let syncStatus = 'idle'; // idle, dirty, syncing, synced, error
             let isDirty = false;
             let saveTimeout = null;
+            let isAppReady = false; // Flag de controlo
             const SAVE_DELAY = 2500; // 2.5 segundos
 
             // --- Cache de Elementos DOM ---
@@ -731,6 +732,7 @@
 
             // --- NOVO Sistema de Salvamento ---
             function scheduleSave() {
+                if (!isAppReady) return; // Não agendar salvamentos antes da app estar pronta
                 isDirty = true;
                 updateSyncStatus('dirty', 'Alterações pendentes...');
                 if (saveTimeout) {
@@ -740,7 +742,9 @@
             }
 
             async function saveDataToFirestore(isManual = false) {
+                if (!isAppReady) return; // Guarda de segurança
                 if (!isDirty && !isManual) return;
+
                 if (saveTimeout) {
                     clearTimeout(saveTimeout);
                     saveTimeout = null;
@@ -1079,11 +1083,13 @@
                         saveDataToFirestore(true); // Força o salvamento inicial
                     }
                     isDirty = false; // Reseta o estado 'dirty' ao carregar dados da nuvem
+                    isAppReady = true; // App está pronta
                     renderApp(); 
                 }, (error) => {
                     console.error("Erro no listener do Firestore:", error);
                     updateSyncStatus('error', 'Erro de conexão');
                     showMessage("Não foi possível conectar à nuvem. Verifique sua conexão.", "error");
+                    isAppReady = true; // App está pronta, mas em modo offline
                 });
             }
 
@@ -1113,6 +1119,7 @@
                     factories = JSON.parse(JSON.stringify(initialFactoriesData));
                     hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
                     log = JSON.parse(JSON.stringify(initialLogData));
+                    isAppReady = true;
                     renderApp();
                 };
 
@@ -1127,17 +1134,22 @@
                     let authInitialized = false;
 
                     onAuthStateChanged(auth, async (user) => {
-                        if (user && !authInitialized) {
-                            authInitialized = true;
-                            currentUser = user; // Define o utilizador global
-                            console.log("Usuário autenticado:", user.uid);
-                            if (localStorage.getItem('isAdminLoggedIn') === 'true') {
-                                isAdminLoggedIn = true;
-                            }
-                            await loadAndSyncData(user);
-                        } else if (!user) {
+                        if (user) {
+                           if (!authInitialized) {
+                                authInitialized = true;
+                                currentUser = user;
+                                console.log("Usuário autenticado:", user.uid);
+                                if (localStorage.getItem('isAdminLoggedIn') === 'true') {
+                                    isAdminLoggedIn = true;
+                                }
+                                await loadAndSyncData(user);
+                           }
+                        } else {
+                            // Se não houver utilizador (raro com login anónimo, mas seguro de tratar)
                             currentUser = null;
                             isAdminLoggedIn = false;
+                            updateSyncStatus('error', 'Não autenticado');
+                            loadOfflineDataAndRender();
                         }
                     });
 
