@@ -291,7 +291,7 @@
     <script type="module">
         // Importações do Firebase SDK
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Dados Iniciais (Este bloco será atualizado no download) ---
@@ -1062,46 +1062,46 @@
                 
                 try {
                     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-                    if (!firebaseConfig) {
-                        updateSyncStatus('error', 'Config. ausente');
-                        throw new Error("Configuração do Firebase não encontrada.");
-                    }
+                    if (!firebaseConfig) throw new Error("Configuração do Firebase não encontrada.");
+
                     const app = initializeApp(firebaseConfig);
                     db = getFirestore(app);
                     auth = getAuth(app);
 
+                    let initialAuthDone = false;
+                    onAuthStateChanged(auth, async (user) => {
+                        if (user && !initialAuthDone) {
+                            initialAuthDone = true; // Evita a reexecução em atualizações de token
+                            updateSyncStatus('syncing', 'Autenticado.');
+                            if (localStorage.getItem('isAdminLoggedIn') === 'true') isAdminLoggedIn = true;
+                            await loadAndSyncData();
+                        }
+                    });
+
+                    // Tenta o login inicial
+                    updateSyncStatus('syncing', 'Autenticando...');
                     try {
-                        updateSyncStatus('syncing', 'Autenticando...');
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } else {
                             await signInAnonymously(auth);
                         }
-                        updateSyncStatus('syncing', 'Autenticado.');
-                    } catch (authError) {
-                        console.error("Falha na autenticação do Firebase:", authError);
-                        updateSyncStatus('error', 'Falha de Auth');
-                        showMessage("Não foi possível autenticar com o serviço. O salvamento na nuvem está desativado.", "error");
-                        
-                        factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                        hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                        log = JSON.parse(JSON.stringify(initialLogData));
-                        renderApp();
-                        return; 
+                        // onAuthStateChanged irá lidar com o carregamento de dados
+                    } catch (signInError) {
+                        // Joga o erro para ser pego pelo bloco catch principal
+                        throw signInError;
                     }
 
-
-                    if (localStorage.getItem('isAdminLoggedIn') === 'true') isAdminLoggedIn = true;
-
-                    await loadAndSyncData();
                 } catch (error) {
-                    console.error("Falha na inicialização do Firebase:", error);
-                    updateSyncStatus('error', 'Falha na inicialização');
-                    showMessage("Não foi possível iniciar a sincronização com a nuvem.", "error");
+                    console.error("Falha na inicialização ou autenticação do Firebase:", error);
+                    updateSyncStatus('error', 'Falha na Conexão');
+                    showMessage("Não foi possível conectar à nuvem. Usando dados locais.", "error");
+                    
+                    // Carrega dados locais como fallback
                     factories = JSON.parse(JSON.stringify(initialFactoriesData));
                     hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
                     log = JSON.parse(JSON.stringify(initialLogData));
-                    renderApp();
+                    renderApp(); // Renderiza com dados locais
                 }
                 
                 navigationContainer.addEventListener('click', handleNavClick);
