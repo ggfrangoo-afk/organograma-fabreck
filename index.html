@@ -1028,7 +1028,11 @@
             async function loadAndSyncData() {
                 updateSyncStatus('syncing', 'Conectando...');
                 const docRef = getDocRef();
-                if (!docRef) return; 
+                if (!docRef) { // Verificação extra de segurança
+                    updateSyncStatus('error', 'Falha de Auth');
+                    showMessage("Não foi possível obter a referência do usuário para carregar os dados.", "error");
+                    return;
+                }
 
                 unsubscribe = onSnapshot(docRef, (snapshot) => {
                     if (snapshot.exists()) {
@@ -1060,50 +1064,7 @@
             async function init() {
                 logoContainer.innerHTML = `<svg viewBox="0 0 200 50" class="w-full h-auto" fill="currentColor"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg>`;
                 
-                try {
-                    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-                    if (!firebaseConfig) throw new Error("Configuração do Firebase não encontrada.");
-
-                    const app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-
-                    let initialAuthDone = false;
-                    onAuthStateChanged(auth, async (user) => {
-                        if (user && !initialAuthDone) {
-                            initialAuthDone = true; // Evita a reexecução em atualizações de token
-                            updateSyncStatus('syncing', 'Autenticado.');
-                            if (localStorage.getItem('isAdminLoggedIn') === 'true') isAdminLoggedIn = true;
-                            await loadAndSyncData();
-                        }
-                    });
-
-                    // Tenta o login inicial
-                    updateSyncStatus('syncing', 'Autenticando...');
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                        // onAuthStateChanged irá lidar com o carregamento de dados
-                    } catch (signInError) {
-                        // Joga o erro para ser pego pelo bloco catch principal
-                        throw signInError;
-                    }
-
-                } catch (error) {
-                    console.error("Falha na inicialização ou autenticação do Firebase:", error);
-                    updateSyncStatus('error', 'Falha na Conexão');
-                    showMessage("Não foi possível conectar à nuvem. Usando dados locais.", "error");
-                    
-                    // Carrega dados locais como fallback
-                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                    log = JSON.parse(JSON.stringify(initialLogData));
-                    renderApp(); // Renderiza com dados locais
-                }
-                
+                // Anexa os listeners da UI imediatamente.
                 navigationContainer.addEventListener('click', handleNavClick);
                 mainContentArea.addEventListener('click', handleMainContentClick);
                 modalBody.addEventListener('click', handleModalEvents);
@@ -1116,10 +1077,51 @@
                 document.getElementById('confirm-modal-close-btn').addEventListener('click', hideConfirmModal);
                 document.getElementById('confirm-modal-cancel-btn').addEventListener('click', hideConfirmModal);
                 confirmModalOkBtn.addEventListener('click', () => { if (confirmCallback) confirmCallback(true); hideConfirmModal(); });
+
+                const loadOfflineDataAndRender = () => {
+                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                    log = JSON.parse(JSON.stringify(initialLogData));
+                    renderApp();
+                };
+
+                try {
+                    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+                    if (!firebaseConfig) throw new Error("Configuração do Firebase não encontrada.");
+
+                    const app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+
+                    onAuthStateChanged(auth, async (user) => {
+                        if (user) {
+                             if (syncStatus !== 'synced') { // Apenas carrega se não estiver já sincronizado
+                                console.log("Usuário autenticado:", user.uid);
+                                updateSyncStatus('syncing', 'Autenticado. Sincronizando...');
+                                if (localStorage.getItem('isAdminLoggedIn') === 'true') {
+                                    isAdminLoggedIn = true;
+                                }
+                                await loadAndSyncData();
+                            }
+                        }
+                    });
+
+                    updateSyncStatus('syncing', 'Autenticando...');
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Falha na inicialização ou autenticação do Firebase:", error);
+                    updateSyncStatus('error', 'Falha na Conexão');
+                    showMessage("Não foi possível conectar à nuvem. O app está em modo offline.", "error");
+                    loadOfflineDataAndRender();
+                }
             }
 
             window.addEventListener('DOMContentLoaded', init);
-
+            
             // --- IMPLEMENTAÇÃO DAS FUNÇÕES DE RENDERIZAÇÃO COMPLETAS ---
             function renderAllShiftsOverview(container) {
                 const shifts = factories.pneus.shifts;
