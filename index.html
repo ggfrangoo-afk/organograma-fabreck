@@ -753,7 +753,7 @@
             const loginAdmin = () => {
                 if (adminPasswordInput.value === ADMIN_PASSWORD) {
                     isAdminLoggedIn = true;
-                    localStorage.setItem('isAdminLoggedIn', 'true');
+                    // REMOVIDO: localStorage.setItem('isAdminLoggedIn', 'true');
                     showMessage("Login de administrador bem-sucedido!", 'success');
                     adminPasswordInput.value = '';
                     updateUI();
@@ -1691,9 +1691,10 @@
                 document.getElementById('confirm-modal-cancel-btn').addEventListener('click', hideConfirmModal);
                 confirmModalOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(true); confirmCallback = null; } hideConfirmModal(); });
                 
-                if (localStorage.getItem('isAdminLoggedIn') === 'true') {
-                    isAdminLoggedIn = true;
-                }
+                // REMOVIDO: Inicialização do estado de administrador do localStorage
+                // if (localStorage.getItem('isAdminLoggedIn') === 'true') {
+                //     isAdminLoggedIn = true;
+                // }
                 
                 window.addEventListener('online', autoSyncOfflineChanges);
                 window.addEventListener('offline', updateOnlineStatus);
