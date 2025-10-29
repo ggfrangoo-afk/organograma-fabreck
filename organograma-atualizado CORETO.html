@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Organograma Fabreck (Funcional)</title>
+    <title>Organograma Fabreck (Firebase Firestore)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts - Inter -->
@@ -17,50 +17,66 @@
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
         }
-        
+
         .employee-card {
             /* Define a transição base para todas as alterações */
-            transition: all 0.2s ease-in-out; 
+            transition: all 0.2s ease-in-out;
         }
 
         /* 1. ESTILO DE HOVER (Azul e Negrito) */
         .employee-card:hover {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1); /* Sombra mais forte */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+            /* Sombra mais forte */
             transform: translateY(-2px);
-            background-color: #bfdbfe; /* Tailwind blue-200 (Azul Claro) */
-            font-weight: 700; /* Negrito */
+            background-color: #bfdbfe;
+            /* Tailwind blue-200 (Azul Claro) */
+            font-weight: 700;
+            /* Negrito */
         }
-        
+
         /* 2. ESTILO PARA FUNCIONÁRIOS DESLIGADOS (Vermelho e Negrito) */
         .employee-card.terminated {
-            color: #991b1b; /* Tailwind red-700 (Vermelho Escuro) */
-            font-weight: 700; /* Negrito */
+            color: #991b1b;
+            /* Tailwind red-700 (Vermelho Escuro) */
+            font-weight: 700;
+            /* Negrito */
             background-color: #fee2e2;
             text-decoration: line-through;
-            opacity: 0.8; /* Aumentei a opacidade para o texto negrito ficar mais visível */
+            opacity: 0.8;
+            /* Aumentei a opacidade para o texto negrito ficar mais visível */
         }
-        
+
         /* Efeito de HOVER específico para cartões desligados (mantém o vermelho) */
         .employee-card.terminated:hover {
-            background-color: #fca5a5; /* Tailwind red-300 */
-            opacity: 1.0; /* Remove a opacidade no hover para destacar a interação */
-            text-decoration: line-through; /* Mantém o risco */
-            color: #7f1d1d; /* Vermelho ainda mais escuro no hover */
+            background-color: #fca5a5;
+            /* Tailwind red-300 */
+            opacity: 1.0;
+            /* Remove a opacidade no hover para destacar a interação */
+            text-decoration: line-through;
+            /* Mantém o risco */
+            color: #7f1d1d;
+            /* Vermelho ainda mais escuro no hover */
         }
-        
+
         /* Estilo para líderes prioritários */
         .employee-card.leader-priority {
-            background-color: #fef3c7; /* Amarelo claro */
-            border: 2px solid #fbbf24; /* Amarelo */
+            background-color: #fef3c7;
+            /* Amarelo claro */
+            border: 2px solid #fbbf24;
+            /* Amarelo */
             font-weight: 700;
         }
 
         /* Efeito de HOVER específico para cartões de líderes (aplica o azul e negrito por cima do amarelo) */
         .employee-card.leader-priority:hover {
-            background-color: #bfdbfe; /* Aplica o Azul Claro do Hover */
-            border-color: #60a5fa; /* Borda azul clara */
-            color: #1f2937; /* Cor do texto padrão (escuro) no hover */
-            font-weight: 800; /* Um pouco mais negrito */
+            background-color: #bfdbfe;
+            /* Aplica o Azul Claro do Hover */
+            border-color: #60a5fa;
+            /* Borda azul clara */
+            color: #1f2937;
+            /* Cor do texto padrão (escuro) no hover */
+            font-weight: 800;
+            /* Um pouco mais negrito */
         }
 
         .sub-nav-tabs {
@@ -119,6 +135,7 @@
 
         /* --- Estilos de Impressão --- */
         @media print {
+
             body {
                 background: #fff !important;
                 -webkit-print-color-adjust: exact;
@@ -265,7 +282,7 @@
                     class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Sair
                     Admin</button>
             </div>
-             <div id="syncStatus" class="text-center text-xs mt-4 p-2 rounded-md">A ligar...</div>
+            <div id="syncStatus" class="text-center text-xs mt-4 p-2 rounded-md">A ligar...</div>
         </div>
     </nav>
 
@@ -312,9 +329,75 @@
     <div id="print-footer" class="hidden">
         PCP FABRECK . JENILTON CRUZ / ORGANOGRAMA
     </div>
-    
+
     <script type="module">
-        // --- Dados Iniciais (Este bloco será usado para criar o primeiro registro no banco de dados) ---
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // =======================================================================================================
+        // 🚨 CONFIGURAÇÃO MANUAL DO FIREBASE (PARA USO EXTERNO) 🚨
+        // VOCÊ DEVE PREENCHER ESTES CAMPOS COM SUAS CREDENCIAIS
+        // =======================================================================================================
+        const YOUR_FIREBASE_CONFIG = {
+            apiKey: "YOUR_API_KEY_HERE", 
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID_HERE", 
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID_HERE",
+            appId: "YOUR_APP_ID_HERE"
+        };
+        
+        // CHAVE MANUAL DO DOCUMENTO DO FIRESTORE (Coleção/Documento)
+        // COLEÇÃO: organogram_data
+        // DOCUMENTO: fabreck-organograma-v1
+        const FIREBASE_DOC_ID = "fabreck-organograma-v1";
+        const FIREBASE_COLLECTION = "organogram_data";
+
+        const USE_GEMINI_ENV = typeof __app_id !== 'undefined'; 
+        // =======================================================================================================
+        
+        let db;
+        let auth;
+        let ORG_DATA_REF;
+
+        try {
+            let config;
+            let docPath;
+            
+            if (USE_GEMINI_ENV) {
+                // Configuração específica para o ambiente Gemini
+                const appId = __app_id;
+                config = JSON.parse(__firebase_config);
+                // O caminho no Gemini precisa seguir a estrutura de segurança: /artifacts/{appId}/public/data/{collection}/{docId}
+                docPath = `artifacts/${appId}/public/data/${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
+            } else {
+                // Configuração para ambiente externo (Sua própria configuração)
+                config = YOUR_FIREBASE_CONFIG;
+                docPath = `${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`; // Caminho simples
+
+                if (config.apiKey === "YOUR_API_KEY_HERE") {
+                    console.warn("ALERTA: Configurações do Firebase não preenchidas. O aplicativo só funcionará se estiver rodando no Gemini ou se você preencher suas chaves.");
+                }
+            }
+            
+            // 1. Initialize Firebase App
+            const app = initializeApp(config);
+            // 2. Initialize Services
+            db = getFirestore(app);
+            auth = getAuth(app);
+            // 3. Define Document Reference
+            ORG_DATA_REF = doc(db, docPath);
+            
+            // Enable Firestore debug logging
+            setLogLevel('Debug');
+        } catch (e) {
+            console.error("Erro na inicialização do Firebase:", e);
+            document.getElementById('syncStatus').textContent = `Erro: ${e.message || 'Firebase não configurado.'}`;
+        }
+
+        // --- Dados Iniciais (Para a primeira vez que o documento é criado) ---
         const initialFactoriesData = {
             "pneus": {
                 "id": "pneus",
@@ -376,7 +459,7 @@
                         "CORTE CAMELBACK": [{ "id": "juvenal-neto", "name": "JUVENAL NETO", "status": "active" }],
                         "CONSTRUÇÃO": [{ "id": "thiago-marreta", "name": "THIAGO MARRETA", "status": "active" }],
                         "TALÃO": [{ "id": "laercio-moreira-junior", "name": "LAÉRCIO MOREIRA JUNIOR", "status": "active" }],
-                        "REBARBA E INSPEÇÃO": [{ "id": "eliane", "status": "active" }],
+                        "REBARBA E INSPEÇÃO": [{ "id": "eliane", "name": "ELIANE", "status": "active" }],
                         "VULCANIZAÇÃO": [
                             { "id": "pedro-henrique-silvestre", "name": "PEDRO HENRIQUE SILVESTRE", "status": "active" },
                             { "id": "eduardo", "name": "EDUARDO", "status": "active" }
@@ -385,25 +468,43 @@
                     }
                 }]
             },
+            // ORGANOGRAMA B-ARO ATUALIZADO COM OS DADOS DO RELATÓRIO
             "bAro": {
                 "id": "bAro",
                 "name": "Organograma B-Aro",
                 "sectors": {
-                    "LIXADEIRAS": [
-                        { "id": "emp-1756380093840", "name": "GUILHERME NOVATO", "status": "active" },
-                        { "id": "emp-baro-6", "name": "JOÃO VICTOR DOS SANTOS", "status": "active" },
-                        { "id": "emp-baro-7", "name": "PEDRO AUGUSTO DOS SANTOS", "status": "active" },
-                        { "id": "emp-baro-8", "name": "TIAGO LUCAS DE MELO", "status": "active" }
-                    ],
-                    "POLIMENTO DE FERRO E ALUMÍNIO": [
-                        { "id": "emp-baro-13", "name": "DENER MELO", "status": "active" },
-                        { "id": "emp-baro-14", "name": "OSCAR ESCALONA MACHADO", "status": "active" },
-                        { "id": "emp-baro-15", "name": "MARCOS VINICIUS BITENCOURT", "status": "active" }
-                    ],
                     "LÍDERES DE PRODUÇÃO": [
                         { "id": "emp-baro-22", "name": "XANDECO", "status": "active" },
-                        // REMOVIDO: { "id": "emp-baro-24", "name": "LEONARDO", "status": "active" },
                         { "id": "emp-baro-23", "name": "BOMBADO", "status": "active" }
+                    ],
+                    "ORGANIZAÇÃO E QUALIDADE": [{ "id": "emp-baro-25", "name": "LUIS", "status": "active" }],
+                    "CALANDRA E SOLDA": [
+                        { "id": "emp-baro-1", "name": "CÉLIO ROBERTO OLIVEIRA TONASSI", "status": "active" },
+                        { "id": "emp-baro-3", "name": "PEDRO HENRIQUE DOS SANTOS", "status": "active" },
+                        { "id": "emp-baro-2", "name": "DOUGLAS WAGNER BARBOZA", "status": "active" }
+                    ],
+                    "CALANDRA E SERRA DE PERFIL ALUMÍNIO": [{ "id": "emp-baro-21", "name": "LEANDRO DE MELO", "status": "active" }],
+                    "CONFORMADORA": [{ "id": "emp-baro-9", "name": "GUILHERME HENRIQUE LEITE XAVIER", "status": "active" }],
+                    "SERRA": [
+                        { "id": "emp-baro-4", "name": "THIAGO APARECIDO DE SOUZA", "status": "active" }
+                        // THIAGO PEREIRA FRANGILO removido conforme relatório (saída)
+                    ],
+                    "LIXADEIRAS": [
+                        // Funcionários atualizados com novos nomes/adições
+                        { "id": "emp-baro-new-1", "name": "GUILHERME DAVILA ARAUJO", "status": "active" },
+                        { "id": "emp-baro-new-2", "name": "JOAO PEDRO DOMINGUES CARVALHO", "status": "active" },
+                        { "id": "emp-baro-6", "name": "JOAO VICTOR DOS SANTOS", "status": "active" },
+                        { "id": "emp-baro-new-3", "name": "LUCAS GABRIEL HIPOLITO", "status": "active" },
+                        { "id": "emp-baro-7", "name": "PEDRO AUGUSTO DOS SANTOS", "status": "active" }
+                    ],
+                    "ESMERIL INTERNO": [{ "id": "emp-baro-10", "name": "FRANK DE JESUS SANDOVAL", "status": "active" }],
+                    "ESMERIL EXTERNO": [{ "id": "emp-baro-11", "name": "CRISTIAN RAFAEL VALLINA", "status": "active" }],
+                    "ESMERIL DESBASTE": [{ "id": "emp-baro-12", "name": "MAICON VINÍCIUS ALVES RODRIGUES", "status": "active" }],
+                    "POLIMENTO DE FERRO E ALUMÍNIO": [
+                        // Nome corrigido para DENNER MELLO
+                        { "id": "emp-baro-13", "name": "DENNER MELLO", "status": "active" },
+                        { "id": "emp-baro-14", "name": "OSCAR ESCALONA MACHADO", "status": "active" },
+                        { "id": "emp-baro-15", "name": "MARCOS VINICIUS BITENCOURT", "status": "active" }
                     ],
                     "FURAÇÃO": [
                         { "id": "emp-baro-16", "name": "WELLINGTON DE SOUZA", "status": "active" },
@@ -413,22 +514,7 @@
                     "GUIDOM": [
                         { "id": "emp-baro-19", "name": "ADILSON MORAES DOS SANTOS", "status": "active" },
                         { "id": "emp-baro-20", "name": "DYONATHAM WILLIAM OLIVEIRA", "status": "active" }
-                    ],
-                    "ESMERIL DESBASTE": [{ "id": "emp-baro-12", "name": "MAICON VINÍCIUS ALVES RODRIGUES", "status": "active" }],
-                    "ESMERIL EXTERNO": [{ "id": "emp-baro-11", "name": "CRISTIAN RAFAEL VALLINA", "status": "active" }],
-                    "ESMERIL INTERNO": [{ "id": "emp-baro-10", "name": "FRANK DE JESUS SANDOVAL", "status": "active" }],
-                    "CALANDRA E SERRA DE PERFIL ALUMÍNIO": [{ "id": "emp-baro-21", "name": "LEANDRO DE MELO", "status": "active" }],
-                    "CALANDRA E SOLDA": [
-                        { "id": "emp-baro-1", "name": "CÉLIO ROBERTO OLIVEIRA TONASSI", "status": "active" },
-                        { "id": "emp-baro-3", "name": "PEDRO HENRIQUE DOS SANTOS", "status": "active" },
-                        { "id": "emp-baro-2", "name": "DOUGLAS WAGNER BARBOZA", "status": "active" }
-                    ],
-                    "CONFORMADORA": [{ "id": "emp-baro-9", "name": "GUILHERME HENRIQUE LEITE XAVIER", "status": "active" }],
-                    "SERRA": [
-                        { "id": "emp-baro-4", "name": "THIAGO APARECIDO DE SOUZA", "status": "active" },
-                        { "id": "emp-baro-5", "name": "THIAGO PEREIRA FRANGILO", "status": "active" }
-                    ],
-                    "ORGANIZAÇÃO E QUALIDADE": [{ "id": "emp-baro-25", "name": "LUIS", "status": "active" }]
+                    ]
                 }
             },
             "injetoras": {
@@ -626,8 +712,17 @@
             "id": "log-1756423463313", "type": "ENTRADA", "date": "28/09/2025", "employeeName": "RANGEL", "context": "Organograma Injetoras de Cubos / MANUTENÇÃO"
         }, {
             "id": "log-1756423596888", "type": "ENTRADA", "date": "28/09/2025", "employeeName": "MÁRIO ", "context": "Organograma Injetora de Pçs / MANUTENÇÃO"
-        }];
-
+        },
+        // NOVAS ENTRADAS/SAÍDAS DO RELATÓRIO B-ARO (28/10/2025 - Data simulada para o relatório)
+        { "id": "log-ba-out-1", "type": "SAÍDA", "date": "28/10/2025", "employeeName": "GUILHERME NOVATO", "context": "Organograma B-Aro / LIXADEIRAS (Substituição)" },
+        { "id": "log-ba-out-2", "type": "SAÍDA", "date": "28/10/2025", "employeeName": "TIAGO LUCAS DE MELO", "context": "Organograma B-Aro / LIXADEIRAS (Transferido Pneu)" },
+        { "id": "log-ba-out-3", "type": "SAÍDA", "date": "28/10/2025", "employeeName": "THIAGO PEREIRA FRANGILO", "context": "Organograma B-Aro / SERRA (Desligamento)" },
+        { "id": "log-ba-in-1", "type": "ENTRADA", "date": "28/10/2025", "employeeName": "GUILHERME DAVILA ARAUJO", "context": "Organograma B-Aro / LIXADEIRAS" },
+        { "id": "log-ba-in-2", "type": "ENTRADA", "date": "28/10/2025", "employeeName": "JOAO PEDRO DOMINGUES CARVALHO", "context": "Organograma B-Aro / LIXADEIRAS" },
+        { "id": "log-ba-in-3", "type": "ENTRADA", "date": "28/10/2025", "employeeName": "LUCAS GABRIEL HIPOLITO", "context": "Organograma B-Aro / LIXADEIRAS" },
+        { "id": "log-ba-name-1", "type": "ALTERAÇÃO", "date": "28/10/2025", "employeeName": "DENER MELO", "context": "Organograma B-Aro / POLIMENTO DE FERRO E ALUMÍNIO (Nome para DENNER MELLO)" },
+        ];
+        
         // Módulo principal da aplicação para organizar o código
         const App = (() => {
             // --- Variáveis de Estado Global ---
@@ -639,21 +734,13 @@
             let currentView = 'organograma';
             let currentOrgSubView = 'overview';
             let isAdminLoggedIn = false;
-            let searchTerm = ''; // Novo estado para o termo de pesquisa (2.2)
-            const ADMIN_PASSWORD = "FBK2025"; // SENHA ATUALIZADA
+            let searchTerm = '';
+            const ADMIN_PASSWORD = "FBK2025";
             let confirmCallback = null;
             let isAppReady = false;
-            
-            // LÍDERES PRIORITÁRIOS: Nomes que devem vir sempre em primeiro no seu setor.
-            // A ordem aqui define a prioridade de desempate: BOMBADO, XANDECO, LUIS.
-            const PRIORITY_LEADERS = ["BOMBADO", "XANDECO", "LUIS"];
 
-            // --- Estado de Sincronização ---
-            // ATENÇÃO: Para uso em produção real, este ID deve ser mantido privado ou substituído
-            // por um serviço de back-end mais seguro. JSONBlob é usado aqui para demonstração.
-            const FIXED_SYNC_KEY = '1695844053634035713'; 
-            const NEEDS_SYNC_KEY = 'fabreck_organograma_needs_sync';
-            let syncDebounceTimer = null;
+            // LÍDERES PRIORITÁRIOS: Nomes que devem vir sempre em primeiro no seu setor.
+            const PRIORITY_LEADERS = ["BOMBADO", "XANDECO", "LUIS"];
 
             // --- Cache de Elementos DOM ---
             const navigationContainer = document.getElementById('navigation-container');
@@ -673,60 +760,13 @@
             const adminLoginBtn = document.getElementById('admin-login-btn');
             const adminLogoutBtn = document.getElementById('admin-logout-btn');
             const logoContainer = document.getElementById('logo-container');
+            const syncStatus = document.getElementById('syncStatus');
 
-             // --- IndexedDB Helper ---
-            // Usando IndexedDB para persistência local robusta
-            const dbPromise = new Promise((resolve, reject) => {
-                const request = indexedDB.open('FabreckOrganogramaDB_v1', 1);
-
-                request.onerror = (event) => {
-                    console.error("Erro ao abrir IndexedDB:", event.target.error);
-                    reject("Erro de base de dados");
-                };
-
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains('organogramaData')) {
-                        db.createObjectStore('organogramaData', { keyPath: 'key' });
-                    }
-                     if (!db.objectStoreNames.contains('settings')) {
-                        db.createObjectStore('settings', { keyPath: 'key' });
-                    }
-                };
-
-                request.onsuccess = (event) => {
-                    console.log("Base de dados local aberta com sucesso.");
-                    resolve(event.target.result);
-                };
-            });
-
-            const dbManager = {
-                async get(storeName, key) {
-                    const db = await dbPromise;
-                    return new Promise((resolve, reject) => {
-                        const transaction = db.transaction(storeName, 'readonly');
-                        const store = transaction.objectStore(storeName);
-                        const request = store.get(key);
-                        request.onsuccess = () => resolve(request.result);
-                        request.onerror = (event) => reject(event.target.error);
-                    });
-                },
-                async set(storeName, value) {
-                    const db = await dbPromise;
-                    return new Promise((resolve, reject) => {
-                        const transaction = db.transaction(storeName, 'readwrite');
-                        const store = transaction.objectStore(storeName);
-                        store.put(value);
-                        transaction.oncomplete = () => resolve();
-                        transaction.onerror = (event) => reject(event.target.error);
-                    });
-                }
-            };
 
             // --- Funções Utilitárias ---
             const showMessage = (message, type = 'success') => {
                 const div = document.createElement('div');
-                div.className = `p-3 rounded-md shadow-lg mb-2 text-white text-sm animate-pulse ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+                div.className = `p-3 rounded-md shadow-lg mb-2 text-white text-sm animate-pulse ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} ${type === 'info' ? 'bg-blue-500' : ''}`;
                 div.textContent = message;
                 messageContainer.appendChild(div);
                 setTimeout(() => div.classList.remove('animate-pulse'), 100);
@@ -738,9 +778,11 @@
                 modalBackdrop.classList.remove('hidden');
             };
             const hideModal = () => modalBackdrop.classList.add('hidden');
-            const showConfirmModal = (title, message, callback) => {
+            const showConfirmModal = (title, message, callback, okText = 'Confirmar', cancelText = 'Cancelar') => {
                 confirmModalTitle.textContent = title;
                 confirmModalMessage.textContent = message;
+                confirmModalOkBtn.textContent = okText;
+                document.getElementById('confirm-modal-cancel-btn').textContent = cancelText;
                 confirmCallback = callback;
                 confirmModalBackdrop.classList.remove('hidden');
             };
@@ -753,7 +795,6 @@
             const loginAdmin = () => {
                 if (adminPasswordInput.value === ADMIN_PASSWORD) {
                     isAdminLoggedIn = true;
-                    // REMOVIDO: localStorage.setItem('isAdminLoggedIn', 'true');
                     showMessage("Login de administrador bem-sucedido!", 'success');
                     adminPasswordInput.value = '';
                     updateUI();
@@ -763,7 +804,6 @@
             };
             const logoutAdmin = () => {
                 isAdminLoggedIn = false;
-                localStorage.removeItem('isAdminLoggedIn');
                 showMessage("Logout de administrador bem-sucedido!", 'success');
                 updateUI();
             };
@@ -786,37 +826,31 @@
                 return Array.from(sectors).sort();
             };
 
-            /**
-             * Filtra a lista de funcionários com base no termo de pesquisa atual (Case-insensitive).
-             * @param {Array<Object>} employees - Lista de objetos de funcionário.
-             * @returns {Array<Object>} Lista de funcionários filtrados.
-             */
             const filterEmployees = (employees) => {
                 if (!searchTerm || currentView !== 'organograma') return employees;
                 const term = searchTerm.toUpperCase();
-                return employees.filter(emp => emp.name.toUpperCase().includes(term));
+                return employees.filter(emp => emp.name?.toUpperCase().includes(term));
             };
-            
-            /**
-             * Ordena a lista de funcionários por hierarquia e, em seguida, alfabeticamente.
-             * @param {Array<Object>} employees - Lista de objetos de funcionário.
-             * @param {string} [responsibleName] - Nome do responsável do turno (apenas para a fábrica Pneus).
-             * @returns {Array<Object>} Lista de funcionários ordenada.
-             */
+
             const sortEmployeesByHierarchy = (employees, responsibleName = null) => {
                 const upperResponsible = responsibleName ? responsibleName.toUpperCase().trim() : '';
                 const upperPriorityLeaders = PRIORITY_LEADERS.map(name => name.toUpperCase().trim());
 
                 return [...employees].sort((a, b) => {
-                    const upperA = a.name.toUpperCase().trim();
-                    const upperB = b.name.toUpperCase().trim();
+                    const upperA = a.name ? a.name.toUpperCase().trim() : ''; // Proteção contra nome undefined/null
+                    const upperB = b.name ? b.name.toUpperCase().trim() : ''; // Proteção contra nome undefined/null
+
+                    // Se um nome for vazio e o outro não, o nome vazio vai para o final
+                    if (upperA === '' && upperB !== '') return 1;
+                    if (upperA !== '' && upperB === '') return -1;
+                    if (upperA === '' && upperB === '') return 0;
 
                     const isAExplicitLeader = upperPriorityLeaders.includes(upperA);
                     const isBExplicitLeader = upperPriorityLeaders.includes(upperB);
-                    
+
                     const isAResponsible = upperA === upperResponsible;
                     const isBResponsible = upperB === upperResponsible;
-                    
+
                     // Priority 1: Check if A or B are leaders (explicit or responsible)
                     const isALeader = isAResponsible || isAExplicitLeader;
                     const isBLeader = isBResponsible || isBExplicitLeader;
@@ -825,190 +859,135 @@
                     if (isALeader && !isBLeader) return -1;
                     // Se B for líder e A não for, B vem primeiro
                     if (!isALeader && isBLeader) return 1;
-                    
+
                     // Se ambos são líderes, aplicamos a ordem definida no array PRIORITY_LEADERS
                     if (isAExplicitLeader && isBExplicitLeader) {
                         const indexA = upperPriorityLeaders.indexOf(upperA);
                         const indexB = upperPriorityLeaders.indexOf(upperB);
                         // Ordena pelo índice (BOMBADO - 0, XANDECO - 1, LUIS - 2)
-                        return indexA - indexB; 
+                        return indexA - indexB;
                     }
-                    
+
                     // Desempate final (aplica-se se ambos são do mesmo tipo de liderança mista ou se nenhum é líder)
                     return upperA.localeCompare(upperB);
                 });
             };
-            
-            // --- Sistema de Salvamento e Sincronização ---
-            async function saveData() {
-                 await dbManager.set('organogramaData', { 
-                    key: 'main', 
-                    value: { 
-                        factories, 
-                        hiringNeeds, 
-                        log 
-                    },
-                    savedAt: new Date().toISOString()
-                });
-                triggerAutoSync();
-                updateUI();
-                showMessage('Alterações salvas localmente.', 'success');
-            }
 
-            function triggerAutoSync() {
-                if (navigator.onLine) {
-                    const syncStatus = document.getElementById('syncStatus');
-                    syncStatus.textContent = 'A guardar alterações...';
-                    syncStatus.style.backgroundColor = '#F39C12'; // Laranja
-                    syncStatus.style.color = '#FFFFFF';
-                    clearTimeout(syncDebounceTimer);
-                    syncDebounceTimer = setTimeout(() => saveToCloud(false, 3), 2500); // 3 retentativas
-                } else {
-                    updateOnlineStatus();
-                    dbManager.set('settings', { key: NEEDS_SYNC_KEY, value: true });
-                }
-            }
-            
+            // --- FIREBASE: Funções de Persistência e Sincronização ---
             /**
-             * Salva os dados na nuvem com mecanismo de retry (Exponential Backoff).
-             * @param {boolean} isSilent - Se deve suprimir mensagens de erro.
-             * @param {number} retries - Número máximo de retentativas.
+             * Salva o estado atual do aplicativo no Firestore.
+             * @param {boolean} isSilent - Se deve suprimir mensagens de sucesso.
              */
-            async function saveToCloud(isSilent = false, retries = 3) {
-                const syncStatus = document.getElementById('syncStatus');
-                
-                const dataToSave = await dbManager.get('organogramaData', 'main');
-                if (!dataToSave) {
-                    if (!isSilent) updateOnlineStatus();
-                    return; 
-                }
+            async function saveData(isSilent = false) {
+                if (!auth?.currentUser || !ORG_DATA_REF) return;
 
-                for (let i = 0; i < retries; i++) {
-                    try {
-                        if (!isSilent) syncStatus.textContent = `A sincronizar... (Tentativa ${i + 1}/${retries})`;
-                        syncStatus.style.backgroundColor = '#F39C12'; 
-
-                        const response = await fetch(`https://jsonblob.com/api/jsonBlob/${FIXED_SYNC_KEY}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                            body: JSON.stringify(dataToSave.value)
-                        });
-
-                        if (response.ok) {
-                            syncStatus.textContent = `Sincronizado às ${new Date().toLocaleTimeString('pt-BR')}`;
-                            syncStatus.style.backgroundColor = '#2ECC71'; // Verde
-                            syncStatus.style.color = '#FFFFFF';
-                            await dbManager.set('settings', { key: NEEDS_SYNC_KEY, value: false });
-                            return; // Sucesso, sai da função
-                        }
-                        
-                        // Erros que indicam que a tentativa pode falhar (5xx, 429)
-                        if (response.status >= 500 || response.status === 429) {
-                            if (i < retries - 1) {
-                                // Exponential backoff com jitter (atraso aleatório)
-                                const delay = Math.pow(2, i) * 1000 + Math.random() * 500;
-                                if (!isSilent) syncStatus.textContent = `Erro temporário. Tentando novamente em ${Math.round(delay / 1000)}s...`;
-                                await new Promise(resolve => setTimeout(resolve, delay));
-                                continue; // Próxima iteração (retentativa)
-                            } else {
-                                throw new Error(`Falha de sincronização após ${retries} tentativas.`);
-                            }
-                        } else {
-                            // Outros erros (ex: 400 Bad Request) não são retentáveis
-                            throw new Error(`Erro no servidor: ${response.statusText}`);
-                        }
-
-                    } catch (error) {
-                        if (i === retries - 1) {
-                            // Se for a última tentativa, marca como falha
-                            syncStatus.textContent = 'Erro de sincronização';
-                            syncStatus.style.backgroundColor = '#E74C3C'; // Vermelho
-                            syncStatus.style.color = '#FFFFFF';
-                            if (!isSilent) showMessage('Falha ao sincronizar os dados. Verifique a sua ligação.', 'error');
-                        }
-                        // Continue (no caso de erros de rede, aguarda o próximo ciclo do loop)
-                    }
-                }
-            }
-            
-            async function loadFromCloud(isSilent = false) {
-                const syncStatus = document.getElementById('syncStatus');
-                if (!isSilent) syncStatus.textContent = 'A carregar da nuvem...';
-                try {
-                    const response = await fetch(`https://jsonblob.com/api/jsonBlob/${FIXED_SYNC_KEY}`);
-                    if (!response.ok) {
-                        // Se for 404 e não houver dados locais, é a primeira vez. Se houver, ignoramos o erro.
-                        if (response.status === 404) return;
-                        throw new Error(`Erro no servidor: ${response.statusText}`);
-                    }
-                    const cloudData = await response.json();
-                    if (!cloudData || !cloudData.factories) throw new Error('Dados da nuvem inválidos.');
-
-                    const localData = await dbManager.get('organogramaData', 'main');
-                    
-                    // Verifica se os dados da nuvem são diferentes dos dados locais atuais
-                    if (!localData || JSON.stringify(cloudData) !== JSON.stringify(localData.value)) {
-                        await applyCloudData(cloudData);
-                    } else {
-                        updateOnlineStatus();
-                    }
-
-                } catch (error) {
-                     updateOnlineStatus();
-                }
-            }
-
-            async function applyCloudData(cloudData) {
-                 await dbManager.set('organogramaData', { 
-                    key: 'main', 
-                    value: cloudData,
-                    savedAt: new Date().toISOString()
-                });
-                await loadFromDB();
-                updateUI();
-                
-                const syncStatus = document.getElementById('syncStatus');
-                syncStatus.textContent = `Sincronizado em ${new Date().toLocaleTimeString('pt-BR')}`;
-                syncStatus.style.backgroundColor = '#2ECC71';
+                syncStatus.textContent = 'A sincronizar com Firestore...';
+                syncStatus.style.backgroundColor = '#F39C12'; // Laranja
                 syncStatus.style.color = '#FFFFFF';
-                showMessage('Dados carregados da nuvem!', 'success');
+
+                try {
+                    await setDoc(ORG_DATA_REF, {
+                        factories,
+                        hiringNeeds,
+                        log,
+                        lastUpdated: new Date().toISOString(),
+                    });
+
+                    syncStatus.textContent = `Sincronizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+                    syncStatus.style.backgroundColor = '#2ECC71'; // Verde
+                    syncStatus.style.color = '#FFFFFF';
+                    if (!isSilent) showMessage('Alterações salvas e sincronizadas na nuvem.', 'success');
+                } catch (error) {
+                    console.error("Erro ao salvar no Firestore:", error);
+                    syncStatus.textContent = 'Erro de sincronização';
+                    syncStatus.style.backgroundColor = '#E74C3C'; // Vermelho
+                    syncStatus.style.color = '#FFFFFF';
+                    showMessage('Falha ao sincronizar os dados com o Firestore.', 'error');
+                }
+            }
+
+            /**
+             * Inicializa o documento no Firestore com dados iniciais se não existir.
+             */
+            async function initializeFirstTimeData() {
+                if (!ORG_DATA_REF) return;
+
+                console.log("Firestore document not found. Initializing with default data...");
+                factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                log = JSON.parse(JSON.stringify(initialLogData));
+
+                // Seed the document in Firestore
+                await saveData(true); // Saves silently
+
+                if (!isAppReady) {
+                    isAppReady = true;
+                    updateUI();
+                }
+                showMessage('Dados iniciais criados e salvos no Firestore.', 'success');
+            }
+
+            /**
+             * Escuta alterações no Firestore em tempo real.
+             */
+            function setupRealtimeListener() {
+                if (!ORG_DATA_REF) return;
+
+                onSnapshot(ORG_DATA_REF, (docSnapshot) => {
+                    const syncStatus = document.getElementById('syncStatus');
+
+                    if (docSnapshot.exists()) {
+                        const cloudData = docSnapshot.data();
+
+                        // Simple check to see if the content data actually changed
+                        const isContentDifferent =
+                            JSON.stringify(cloudData.factories) !== JSON.stringify(factories) ||
+                            JSON.stringify(cloudData.hiringNeeds) !== JSON.stringify(hiringNeeds) ||
+                            JSON.stringify(cloudData.log) !== JSON.stringify(log);
+
+                        if (isContentDifferent || !isAppReady) {
+                            factories = cloudData.factories || {};
+                            hiringNeeds = cloudData.hiringNeeds || [];
+                            log = cloudData.log || [];
+
+                            if (!isAppReady) {
+                                isAppReady = true;
+                                updateUI();
+                                syncStatus.textContent = `Carregado (${new Date().toLocaleTimeString('pt-BR')})`;
+                                syncStatus.style.backgroundColor = '#2ECC71';
+                            } else if (isContentDifferent) {
+                                updateUI();
+                                showMessage('Atualização em tempo real recebida.', 'info');
+                                syncStatus.textContent = `Sincronizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+                                syncStatus.style.backgroundColor = '#2ECC71';
+                            }
+                        }
+                    } else {
+                        // Document does not exist (first time access)
+                        if (!isAppReady) {
+                            initializeFirstTimeData();
+                        } else {
+                            // If the app was running and the document was deleted, try recreating.
+                            console.warn("Documento Firestore não existe. Recriando com dados atuais...");
+                            initializeFirstTimeData();
+                        }
+                    }
+                    updateOnlineStatus();
+                }, (error) => {
+                    console.error("Erro no listener do Firestore:", error);
+                    syncStatus.textContent = 'Erro de Conexão: Firestore';
+                    syncStatus.style.backgroundColor = '#E74C3C';
+                });
             }
 
             function updateOnlineStatus() {
                 const syncStatus = document.getElementById('syncStatus');
-                if (navigator.onLine) {
-                    syncStatus.textContent = 'Online';
-                    syncStatus.style.backgroundColor = '#2ECC71';
-                    syncStatus.style.color = '#FFFFFF';
-                } else {
-                    syncStatus.textContent = 'Offline - A trabalhar localmente';
-                    syncStatus.style.backgroundColor = '#E74C3C';
+                if (!navigator.onLine) {
+                    syncStatus.textContent = 'Offline (Aguardando rede)';
+                    syncStatus.style.backgroundColor = '#5D6D7E';
                     syncStatus.style.color = '#FFFFFF';
                 }
-            }
-            
-            async function autoSyncOfflineChanges() {
-                updateOnlineStatus();
-                const needsSync = await dbManager.get('settings', NEEDS_SYNC_KEY);
-                if (needsSync?.value && navigator.onLine) {
-                    showMessage('Conexão restaurada. A sincronizar alterações...', 'info');
-                    await saveToCloud(false, 3);
-                }
-            }
-            
-            async function loadFromDB() {
-                const data = await dbManager.get('organogramaData', 'main');
-                if (data && data.value) {
-                    factories = data.value.factories || {};
-                    hiringNeeds = data.value.hiringNeeds || [];
-                    log = data.value.log || [];
-                } else {
-                    // Carga inicial se o IndexedDB estiver vazio
-                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
-                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
-                    log = JSON.parse(JSON.stringify(initialLogData));
-                    await saveData(); 
-                }
+                // Se estiver online, o status do Firebase (verde ou vermelho) prevalece.
             }
 
             // --- Funções de Manipulação de Dados (CRUD) ---
@@ -1042,8 +1021,7 @@
                 const sector = document.getElementById('add-employee-sector')?.value.toUpperCase().trim();
                 if (!name || !sector) return showMessage("Nome e setor são obrigatórios.", 'error');
 
-                // Melhoria 1.2: Para a próxima iteração, usar crypto.randomUUID()
-                const newEmployee = { id: `emp-${Date.now()}`, name, status: 'active' }; 
+                const newEmployee = { id: `emp-${Date.now()}`, name, status: 'active' };
                 let contextName = '';
                 if (factoryId === 'pneus') {
                     const shift = factories.pneus.shifts.find(s => s.id === contextId);
@@ -1106,7 +1084,7 @@
                 if (!newName || !newSectorName) return showMessage("Nome e setor são obrigatórios.", 'error');
 
                 let employeeToMove;
-                
+
                 // 1. Remove o funcionário da posição antiga
                 if (factoryId === 'pneus') {
                     const shift = factories.pneus.shifts.find(s => s.id === contextId);
@@ -1128,7 +1106,7 @@
                 }
 
                 if (!employeeToMove) return showMessage("Funcionário original não encontrado para mover.", "error");
-                
+
                 // 2. Atualiza nome e insere na nova posição
                 employeeToMove.name = newName;
                 if (factoryId === 'pneus') {
@@ -1139,7 +1117,7 @@
                     if (!factories[factoryId].sectors[newSectorName]) factories[factoryId].sectors[newSectorName] = [];
                     factories[factoryId].sectors[newSectorName].push(employeeToMove);
                 }
-                
+
                 hideModal();
                 saveData();
             }
@@ -1164,11 +1142,10 @@
                             log.unshift({ id: `log-${Date.now()}`, type: 'SAÍDA', date: new Date().toLocaleDateString('pt-BR'), employeeName: employee.name, context: contextName });
                             hideModal();
                             saveData();
-                            
-                            // Melhoria 2.3: Remoção do setTimeout e uso de confirmação de modal sequencial
+
                             showConfirmModal('Criar Vaga de Contratação?', `Deseja abrir uma nova vaga para substituir '${employee.name}' no setor '${oldSectorName}'?`,
                                 () => { handleAddHiringNeed({ factoryId, shiftId: contextId, sector: oldSectorName, reasonType: 'Desligamento de Funcionário', employeeToReplace: employee.name, departureDate: new Date().toISOString().split('T')[0], shouldAutoOpen: true }); }
-                            , 'Sim', 'Não');
+                                , 'Sim', 'Não');
                         } else { showMessage("Erro ao encontrar funcionário para desligar.", "error"); }
                     }
                 );
@@ -1202,7 +1179,7 @@
              * @param {string} needId - O ID da necessidade a ser resolvida.
              */
             function handleResolveHiringNeed(needId) {
-                 showConfirmModal('Resolver Vaga', 'Tem certeza que deseja marcar esta vaga como resolvida e removê-la da lista de necessidades?',
+                showConfirmModal('Resolver Vaga', 'Tem certeza que deseja marcar esta vaga como resolvida e removê-la da lista de necessidades?',
                     () => {
                         const initialLength = hiringNeeds.length;
                         hiringNeeds = hiringNeeds.filter(need => need.id !== needId);
@@ -1221,7 +1198,7 @@
                 const factoryOptions = Object.values(factories).map(f => `<option value="${f.id}" ${prefill.factoryId === f.id ? 'selected' : ''}>${f.name}</option>`).join('');
                 const modalContent = `<div class="space-y-4 text-left"><div><label class="block text-sm font-medium text-gray-700">Fábrica</label><select id="hiring-need-factory" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${factoryOptions}</select></div><div id="shift-selector-container" class="hidden"></div><div><label class="block text-sm font-medium text-gray-700">Setor (Função)</label><select id="hiring-need-sector" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Selecione</option></select></div><div><label class="block text-sm font-medium text-gray-700">Motivo</label><select id="hiring-need-reasonType" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Selecione</option><option value="Aumento de Produção" ${prefill.reasonType === 'Aumento de Produção' ? 'selected' : ''}>Aumento de Produção</option><option value="Desligamento de Funcionário" ${prefill.reasonType === 'Desligamento de Funcionário' ? 'selected' : ''}>Desligamento</option><option value="Nova Posição" ${prefill.reasonType === 'Nova Posição' ? 'selected' : ''}>Nova Posição</option><option value="Outro" ${prefill.reasonType === 'Outro' ? 'selected' : ''}>Outro</option></select></div><div id="replacement-fields" class="hidden space-y-4"><div><label class="block text-sm font-medium text-gray-700">Substituindo</label><input type="text" id="hiring-need-employeeToReplace" value="${prefill.employeeToReplace || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div><div><label class="block text-sm font-medium text-gray-700">Data Desligamento</label><input type="date" id="hiring-need-departureDate" value="${prefill.departureDate || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div></div><div><label class="block text-sm font-medium text-gray-700">Início Previsto</label><input type="date" id="hiring-need-expectedStartDate" value="${prefill.expectedStartDate || ''}" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" /></div><div><label class="block text-sm font-medium text-gray-700">Responsabilidades</label><textarea id="hiring-need-keyResponsibilities" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${prefill.keyResponsibilities || ''}</textarea></div><div><label class="block text-sm font-medium text-gray-700">Observações</label><textarea id="hiring-need-notes" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">${prefill.notes || ''}</textarea></div><button data-action="save-new-hiring-need" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md">Salvar</button></div>`;
                 showModal("Criar Nova Necessidade de Contratação", modalContent);
-                
+
                 const factorySelect = document.getElementById('hiring-need-factory');
                 const sectorSelect = document.getElementById('hiring-need-sector');
                 const reasonTypeSelect = document.getElementById('hiring-need-reasonType');
@@ -1232,11 +1209,13 @@
                     const factory = factories[selectedFactoryId];
                     const sectors = getSectorsForFactory(selectedFactoryId);
                     sectorSelect.innerHTML = '<option value="">Selecione</option>' + sectors.map(s => `<option value="${s}">${s}</option>`).join('');
-                    if(prefill.sector) sectorSelect.value = prefill.sector;
+                    if (prefill.sector) sectorSelect.value = prefill.sector;
 
                     if (factory?.shifts) {
+                        shiftContainer.classList.remove('hidden');
                         shiftContainer.innerHTML = `<label class="block text-sm font-medium text-gray-700">Turno</label><select id="hiring-need-shift" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Todos</option>${factory.shifts.map(s => `<option value="${s.id}" ${prefill.shiftId === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}</select>`;
                     } else {
+                        shiftContainer.classList.add('hidden');
                         shiftContainer.innerHTML = '';
                     }
 
@@ -1245,25 +1224,25 @@
 
                 factorySelect.addEventListener('change', updateFields);
                 reasonTypeSelect.addEventListener('change', updateFields);
-                
+
                 // Inicializa os campos
                 updateFields();
-                if(prefill.factoryId) factorySelect.value = prefill.factoryId;
-                if(prefill.reasonType) reasonTypeSelect.value = prefill.reasonType;
-                updateFields(); 
+                if (prefill.factoryId) factorySelect.value = prefill.factoryId;
+                if (prefill.reasonType) reasonTypeSelect.value = prefill.reasonType;
+                updateFields();
             }
             function handleSaveNewHiringNeed() {
-                const newNeed = { 
-                    id: `need-${Date.now()}`, 
-                    factoryId: document.getElementById('hiring-need-factory').value, 
-                    shiftId: document.getElementById('hiring-need-shift')?.value || null, 
-                    sector: document.getElementById('hiring-need-sector').value, 
-                    reasonType: document.getElementById('hiring-need-reasonType').value, 
-                    employeeToReplace: document.getElementById('hiring-need-employeeToReplace').value, 
-                    departureDate: document.getElementById('hiring-need-departureDate').value, 
-                    expectedStartDate: document.getElementById('hiring-need-expectedStartDate').value, 
-                    keyResponsibilities: document.getElementById('hiring-need-keyResponsibilities').value, 
-                    notes: document.getElementById('hiring-need-notes').value 
+                const newNeed = {
+                    id: `need-${Date.now()}`,
+                    factoryId: document.getElementById('hiring-need-factory').value,
+                    shiftId: document.getElementById('hiring-need-shift')?.value || null,
+                    sector: document.getElementById('hiring-need-sector').value,
+                    reasonType: document.getElementById('hiring-need-reasonType').value,
+                    employeeToReplace: document.getElementById('hiring-need-employeeToReplace').value,
+                    departureDate: document.getElementById('hiring-need-departureDate').value,
+                    expectedStartDate: document.getElementById('hiring-need-expectedStartDate').value,
+                    keyResponsibilities: document.getElementById('hiring-need-keyResponsibilities').value,
+                    notes: document.getElementById('hiring-need-notes').value
                 };
                 if (!newNeed.factoryId || !newNeed.sector || !newNeed.reasonType) return showMessage("Fábrica, Setor e Motivo são obrigatórios.", 'error');
                 hiringNeeds.push(newNeed);
@@ -1273,7 +1252,7 @@
 
             // --- Funções de Renderização ---
             function renderNavigation() {
-                const totalNeeds = hiringNeeds.length; // Cálculo da contagem de vagas (2.4)
+                const totalNeeds = hiringNeeds.length;
                 const needsBadge = totalNeeds > 0 ? `<span class="inline-flex items-center justify-center px-2 py-0.5 ml-2 text-xs font-bold leading-none text-white bg-red-600 rounded-full">${totalNeeds}</span>` : '';
 
                 navigationContainer.innerHTML = `
@@ -1282,16 +1261,16 @@
                 <h2 class="text-xl font-semibold my-4 border-b border-blue-700 pb-2">Vistas</h2>
                 <ul class="space-y-3">
                     <li><button data-action="show-hiring-needs" class="w-full flex justify-between items-center text-left py-2 px-4 rounded-md transition ${currentView === 'hiringNeedsOverview' ? 'bg-orange-600 font-bold' : 'bg-orange-500 hover:bg-orange-600'}">Necessidades Contratação${needsBadge}</button></li>
-                    <li><button data-action="show-log" class="w-full text-left py-2 px-4 rounded-md transition ${currentView === 'logView' ? 'bg-indigo-600 font-bold' : 'bg-indigo-500 hover:bg-indigo-600'}">Log de Movimentações</button></li>
+                    <li><button data-action="show-movement-report" class="w-full text-left py-2 px-4 rounded-md transition ${currentView === 'movementReportView' ? 'bg-indigo-600 font-bold' : 'bg-indigo-500 hover:bg-indigo-600'}">Relatório de Movimentações</button></li>
+                    <li><button data-action="show-log" class="w-full text-left py-2 px-4 rounded-md transition ${currentView === 'logView' ? 'bg-indigo-600 font-bold' : 'bg-indigo-500 hover:bg-indigo-600'}">Log de Movimentações (Detalhado)</button></li>
                 </ul>`;
                 adminLoginSection.classList.toggle('hidden', isAdminLoggedIn);
                 adminLogoutSection.classList.toggle('hidden', !isAdminLoggedIn);
             }
 
             function renderSearchBar() {
-                // A barra de pesquisa só é mostrada se estiver na vista Organograma (para evitar pesquisa no Log ou Necessidades)
                 if (currentView !== 'organograma') return '';
-                
+
                 const factory = factories[currentFactoryId];
 
                 return `
@@ -1299,7 +1278,7 @@
                         <div class="flex items-center bg-white rounded-xl shadow-md p-4 space-x-3">
                             <i class="fas fa-search text-gray-400"></i>
                             <input type="text" id="employee-search-input" placeholder="Pesquisar funcionário por nome ou setor em ${factory ? factory.name : 'fábrica atual'}..."
-                                class="flex-grow p-1 text-gray-700 focus:outline-none" 
+                                class="flex-grow p-1 text-gray-700 focus:outline-none"
                                 value="${searchTerm}"
                                 oninput="App.handleSearch(this.value)">
                             ${searchTerm ? `<button onclick="App.handleSearch('')" class="text-gray-500 hover:text-gray-800"><i class="fas fa-times-circle"></i></button>` : ''}
@@ -1310,18 +1289,19 @@
 
             function renderMainContent() {
                 mainContentArea.innerHTML = '';
-                
-                // Adiciona barra de pesquisa se a vista atual for um organograma (2.2)
+
+                // Adiciona barra de pesquisa se a vista atual for um organograma
                 const searchBarHtml = renderSearchBar();
                 if (searchBarHtml) {
                     mainContentArea.innerHTML += searchBarHtml;
                 }
-                
+
                 const contentContainer = document.createElement('div');
-                contentContainer.className = 'w-full max-w-7xl mx-auto'; 
+                contentContainer.className = 'w-full max-w-7xl mx-auto';
 
                 if (currentView === 'hiringNeedsOverview') contentContainer.innerHTML = renderHiringNeedsOverview();
                 else if (currentView === 'logView') contentContainer.innerHTML = renderLogView();
+                else if (currentView === 'movementReportView') contentContainer.innerHTML = renderMovementReport(); // NOVA VISTA
                 else if (currentFactoryId === 'pneus') {
                     if (currentView === 'detailedShift') contentContainer.innerHTML = renderDetailedShiftView();
                     else {
@@ -1341,13 +1321,12 @@
 
                 mainContentArea.appendChild(contentContainer);
             }
-            
+
             // --- Lógica de Eventos ---
             function handleSearch(term) {
                 searchTerm = term;
                 updateUI();
-                
-                // Scroll para o topo para garantir que a pesquisa é visível
+
                 if (searchTerm) {
                     mainContentArea.scrollTop = 0;
                 }
@@ -1364,8 +1343,9 @@
                     selectedShiftId = null;
                 } else if (action === 'show-hiring-needs') currentView = 'hiringNeedsOverview';
                 else if (action === 'show-log') currentView = 'logView';
-                
-                searchTerm = ''; // Limpa a pesquisa ao mudar de vista/fábrica
+                else if (action === 'show-movement-report') currentView = 'movementReportView'; // Novo
+
+                searchTerm = '';
                 updateUI();
             }
 
@@ -1383,7 +1363,7 @@
                 } else if (action === 'print-page') window.print();
                 else if (isAdminLoggedIn && target.classList.contains('employee-card')) handleEditEmployee(factoryId, contextId, sectorName, employeeId);
                 else if (isAdminLoggedIn && action === 'add-hiring-need') handleAddHiringNeed();
-                else if (isAdminLoggedIn && action === 'resolve-hiring-need') handleResolveHiringNeed(needId); // Novo evento para resolver vaga
+                else if (isAdminLoggedIn && action === 'resolve-hiring-need') handleResolveHiringNeed(needId);
                 else if (isAdminLoggedIn && action === 'add-employee') {
                     handleAddEmployee(factoryId, contextId);
                 }
@@ -1406,7 +1386,7 @@
                         const shiftContainer = document.getElementById('shift-selector-container');
                         const sectorSelect = document.getElementById('hiring-need-sector');
                         const reasonTypeSelect = document.getElementById('hiring-need-reasonType');
-                        
+
                         // Atualiza Setores
                         const sectors = getSectorsForFactory(factoryId);
                         const sectorOptions = sectors.map(s => `<option value="${s}">${s}</option>`).join('');
@@ -1414,11 +1394,13 @@
 
                         // Atualiza Turnos (apenas para pneus)
                         if (factory?.shifts) {
+                            shiftContainer.classList.remove('hidden');
                             shiftContainer.innerHTML = `<label class="block text-sm font-medium text-gray-700">Turno</label><select id="hiring-need-shift" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Todos</option>${factory.shifts.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</select>`;
                         } else {
+                            shiftContainer.classList.add('hidden');
                             shiftContainer.innerHTML = '';
                         }
-                        
+
                         // Alterna campos de substituição
                         document.getElementById('replacement-fields').classList.toggle('hidden', reasonTypeSelect.value !== 'Desligamento de Funcionário');
                     }
@@ -1426,63 +1408,177 @@
             }
 
             function updateUI() {
-                if(!isAppReady) return;
+                if (!isAppReady) return;
                 renderNavigation();
                 renderMainContent();
             }
 
+            // Update the main initialization function
             async function initializeAppData() {
-                // Prepara a interface para o carregamento
-                mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-gray-600 animate-pulse">A carregar dados locais...</p></div>`;
-                updateOnlineStatus(); // Define o status inicial (online/offline)
+                // 1. Display loading message
+                mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-gray-600 animate-pulse">A conectar com Firebase...</p></div>`;
+                syncStatus.textContent = 'A conectar...';
+                syncStatus.style.backgroundColor = '#F39C12';
+                syncStatus.style.color = '#FFFFFF';
 
-                // 1. Carrega dados do IndexedDB
-                await loadFromDB();
-                
-                isAppReady = true;
+                if (!auth || !db) return; // Se a inicialização do Firebase falhou, pare aqui.
 
-                // 2. Renderiza a UI com dados locais
-                updateUI(); 
+                // 2. Perform Firebase Authentication
+                try {
+                    if (USE_GEMINI_ENV) {
+                        // Autenticação Específica Gemini
+                        if (typeof __initial_auth_token !== 'undefined') {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } else {
+                        // Autenticação Padrão para ambiente externo (login anônimo)
+                        await signInAnonymously(auth);
+                    }
+                    console.log(`Firebase user logged in: ${auth.currentUser.uid}`);
 
-                // 3. Tenta sincronizar com a nuvem (incluindo checagem de conflitos)
-                autoSyncOfflineChanges();
-                loadFromCloud(true);
+                    // 3. Setup real-time listener (This handles loading and setting isAppReady)
+                    setupRealtimeListener();
+
+                } catch (error) {
+                    console.error("Erro de autenticação Firebase:", error);
+                    syncStatus.textContent = 'Erro de autenticação';
+                    syncStatus.style.backgroundColor = '#E74C3C';
+                    mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-red-600">Falha na Autenticação Firebase. Consulte o console para detalhes.</p></div>`;
+                    return;
+                }
             }
+
+            /**
+             * NOVO RELATÓRIO: Agrega entradas e saídas por fábrica e setor.
+             */
+            function renderMovementReport() {
+                const reportData = {};
             
+                // 1. Aggregate log data by Factory/Context
+                log.forEach(entry => {
+                    // Usa a primeira parte do contexto como chave (ex: Organograma B-Aro)
+                    const [factoryName] = entry.context.split(' / ');
+                    const key = factoryName; 
+                    if (!reportData[key]) {
+                        reportData[key] = [];
+                    }
+                    reportData[key].push(entry);
+                });
+            
+                let content = '';
+                const sortedReportKeys = Object.keys(reportData).sort();
+
+                if (sortedReportKeys.length === 0) {
+                    return `<div class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 lg:p-10 mx-auto">
+                        <h2 class="text-3xl font-bold text-gray-800 mb-8 text-center">Relatório Automático de Movimentações</h2>
+                        <p class="text-center text-gray-500 text-lg mt-10">Nenhum registro de movimentação encontrado.</p>
+                    </div>`;
+                }
+
+                // 2. Render report per Factory
+                sortedReportKeys.forEach(factoryName => {
+                    const entries = reportData[factoryName];
+                    const totalEntries = entries.filter(e => e.type === 'ENTRADA').length;
+                    const totalExits = entries.filter(e => e.type === 'SAÍDA').length;
+                    const totalChanges = entries.filter(e => e.type === 'ALTERAÇÃO').length;
+                    
+                    // Group entries by Sector/Context for sub-lists
+                    const sectorMovements = entries.reduce((acc, entry) => {
+                        const contextParts = entry.context.split(' / ');
+                        // Sector is typically the last or second to last part (handling 'Pneus / TURNO / SETOR')
+                        let sectorName = contextParts[contextParts.length - 1]; 
+                        if (contextParts.length >= 3 && factoryName === 'Organograma Pneus') {
+                             // Exibe SETOR / TURNO
+                            sectorName = `${contextParts[2]} / ${contextParts[1]}`;
+                        }
+                        
+                        if (!acc[sectorName]) {
+                            acc[sectorName] = [];
+                        }
+                        acc[sectorName].push(entry);
+                        return acc;
+                    }, {});
+                    
+                    const sortedSectorKeys = Object.keys(sectorMovements).sort();
+
+                    let sectorsHtml = sortedSectorKeys.map(sector => {
+                        const moves = sectorMovements[sector];
+                        const entradas = moves.filter(m => m.type === 'ENTRADA').length;
+                        const saidas = moves.filter(m => m.type === 'SAÍDA').length;
+                        const alteracoes = moves.filter(m => m.type === 'ALTERAÇÃO').length;
+            
+                        if (entradas === 0 && saidas === 0 && alteracoes === 0) return '';
+                        
+                        const listItems = moves.map(m => {
+                            const colorClass = m.type === 'ENTRADA' ? 'text-green-700' : m.type === 'SAÍDA' ? 'text-red-700' : 'text-blue-700';
+                            let employeeDisplay = m.employeeName;
+                            // Exibir o motivo se for uma alteração (Ex: Nome para DENNER MELLO)
+                            if (m.type === 'ALTERAÇÃO' || m.context.includes('(Transferido') || m.context.includes('(Substituição')) {
+                                employeeDisplay = m.context.replace(`${factoryName} / `, '').replace(`${sector} (`, ' (');
+                            }
+
+                            return `<li class="ml-4 flex justify-between items-center text-sm ${colorClass}">
+                                        <span class="font-medium">${m.type === 'ALTERAÇÃO' ? employeeDisplay : `${m.employeeName} (${m.type})`}</span>
+                                        <span class="text-xs text-gray-500 ml-2">${m.date}</span>
+                                    </li>`;
+                        }).join('');
+                        
+                        return `<div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4 break-inside-avoid">
+                                    <h4 class="font-semibold text-lg text-gray-800 border-b pb-2 mb-2">${sector}</h4>
+                                    <p class="text-xs text-gray-600 mb-2">Entradas: ${entradas} | Saídas: ${saidas} | Alterações: ${alteracoes}</p>
+                                    <ul class="list-none p-0">${listItems}</ul>
+                                </div>`;
+                    }).join('');
+            
+                    content += `<div class="bg-white p-6 rounded-xl shadow-lg mb-8 printable-area">
+                        <h3 class="text-2xl font-bold text-gray-800 mb-4">${factoryName}</h3>
+                        <p class="text-lg font-semibold text-gray-600 mb-6">Total de Movimentações: Entradas (${totalEntries}) / Saídas (${totalExits}) / Outras (${totalChanges})</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${sectorsHtml}</div>
+                    </div>`;
+                });
+            
+                const header = `<div class="w-full max-w-6xl mx-auto"><h2 class="text-4xl font-extrabold text-gray-800 mb-2 text-center">Relatório Automático de Movimentações</h2><p class="text-center text-gray-600 mb-8">Análise de Entradas e Saídas por Setor, baseada no histórico da aplicação.</p><button data-action="print-page" class="mb-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition no-print">Imprimir Relatório</button></div>`;
+                
+                return header + content;
+            }
+
+
             // --- IMPLEMENTAÇÃO DAS FUNÇÕES DE RENDERIZAÇÃO COMPLETAS ---
             function renderAllShiftsOverview(container) {
                 if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const shifts = factories.pneus.shifts;
-                
+
                 // Filtra os turnos cujos funcionários ativos satisfaçam o termo de pesquisa (se houver)
                 const filteredShifts = shifts.filter(shift => {
                     if (!searchTerm) return true;
                     const shiftEmployees = getAllEmployeesFromShift(shift);
                     return filterEmployees(shiftEmployees).length > 0;
                 });
-                
+
                 const content = filteredShifts.length > 0 ? `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${filteredShifts.map(shift => {
                     const needsForShift = hiringNeeds.filter(need => need.factoryId === 'pneus' && (need.shiftId === shift.id || !need.shiftId));
                     let hiringNeedsHtml = needsForShift.length > 0 ? `<div class="mt-4 pt-3 border-t border-blue-200"><h4 class="font-bold text-red-600 text-sm mb-1">VAGA EM ABERTO:</h4><ul class="list-disc list-inside text-sm text-red-800">${needsForShift.map(need => `<li>${need.sector}</li>`).join('')}</ul></div>` : '';
-                    
+
                     // Contagem filtrada
                     const shiftEmployees = getAllEmployeesFromShift(shift);
                     const filteredAndActiveCount = filterEmployees(shiftEmployees.filter(emp => emp.status === 'active')).length;
-                    
+
                     if (searchTerm && filteredAndActiveCount === 0) return ''; // Não mostra o cartão se não houver resultados ativos na pesquisa
-                    
+
                     return `<div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500"><h3 class="text-xl font-bold text-blue-800 mb-2">${shift.name}</h3><p class="text-gray-700"><span class="font-semibold">Responsável:</span> ${shift.responsible}</p><p class="text-gray-700"><span class="font-semibold">Horário:</span> ${shift.time}</p><p class="text-gray-700 mt-2"><span class="font-semibold">Funcionários Ativos:</span> ${filteredAndActiveCount}</p>${hiringNeedsHtml}<button data-action="view-shift-details" data-shift-id="${shift.id}" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-md transition">Ver Detalhes</button></div>`
                 }).join('')}</div>` : `<p class="text-center text-gray-500 text-lg">${searchTerm ? 'Nenhum funcionário encontrado com este termo.' : 'Nenhum turno cadastrado.'}</p>`;
-                
+
                 container.innerHTML = `<div class="printable-area"><div class="flex justify-between items-center mb-4 no-print"><h2 class="text-3xl font-bold text-gray-800">Resumo de Todos os Turnos</h2><button data-action="print-page" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Imprimir</button></div><div class="print-header hidden"><svg viewBox="0 0 200 50" class="print-logo" fill="black"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg><h2 class="print-title">FABRECK PNEUS - RESUMO DE TURNOS</h2></div>${content}</div>`;
             }
 
             function renderFullOrgChart(container) {
                 if (!factories.pneus || !factories.pneus.shifts) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const shifts = factories.pneus.shifts;
-                
+
                 const orgChartContent = shifts.length > 0 ? `<div class="flex flex-col items-center"><div class="w-full flex flex-col lg:flex-row justify-around items-start gap-8 org-chart-columns">${shifts.map(shift => {
-                    
+
                     // Renderiza as funções/setores do turno
                     const sectorsHtml = Object.entries(shift.functions)
                         .sort((a, b) => a[0].localeCompare(b[0]))
@@ -1496,7 +1592,9 @@
                             if (searchTerm && filteredEmployees.length === 0) return ''; // Oculta setor se vazio na pesquisa
 
                             return `<div class="sector-card"><h4>${func}</h4><div class="space-y-2">${sortedEmployees.map(emp => {
-                                const isLeader = (shift.responsible?.toUpperCase().trim() === emp.name.toUpperCase().trim()) || PRIORITY_LEADERS.map(n => n.toUpperCase()).includes(emp.name.toUpperCase().trim());
+                                // Adicionada proteção dentro do map também, embora a ordenação já trate o caso
+                                const empName = emp.name ? emp.name.toUpperCase().trim() : '';
+                                const isLeader = (shift.responsible?.toUpperCase().trim() === empName) || PRIORITY_LEADERS.map(n => n.toUpperCase()).includes(empName);
                                 const leaderClass = isLeader ? 'leader-priority' : '';
                                 return `<div class="employee-card bg-gray-50 rounded shadow-sm p-2 text-center text-sm ${isAdminLoggedIn ? 'cursor-pointer' : ''} ${emp.status === 'terminated' ? 'terminated' : ''} ${leaderClass}" data-factory-id="pneus" data-context-id="${shift.id}" data-sector-name="${func}" data-employee-id="${emp.id}">${emp.name}</div>`;
                             }).join('')}</div></div>`;
@@ -1507,17 +1605,17 @@
                     }
                     return ''; // Oculta o turno se não houver resultados na pesquisa
                 }).join('')}</div></div>` : `<p class="text-center text-gray-500 text-lg">Nenhum turno cadastrado.</p>`;
-                
+
                 container.innerHTML = `<div class="printable-area"><div class="flex justify-between items-center mb-4 no-print"><h2 class="text-3xl font-bold text-gray-800">Organograma Estruturado</h2><button data-action="print-page" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Imprimir</button></div><div class="print-header hidden"><svg viewBox="0 0 200 50" class="print-logo" fill="black"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg><h2 class="print-title">FABRECK PNEUS</h2></div><div class="w-full overflow-x-auto p-4 org-chart-container">${orgChartContent}</div></div>`;
             }
 
             function renderDetailedShiftView() {
                 if (!factories.pneus || !factories.pneus.shifts) { return '<p>Carregando...</p>'; }
                 const shift = factories.pneus.shifts.find(s => s.id === selectedShiftId);
-                if (!shift) { 
-                    currentView = 'organograma'; 
+                if (!shift) {
+                    currentView = 'organograma';
                     updateUI();
-                    return ''; 
+                    return '';
                 }
 
                 const adminAddButton = isAdminLoggedIn
@@ -1526,7 +1624,7 @@
 
                 const needsForShift = hiringNeeds.filter(need => need.factoryId === 'pneus' && (need.shiftId === shift.id || !need.shiftId));
                 let hiringNeedsHtml = needsForShift.length > 0 ? `<div class="mb-8 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg"><h4 class="font-bold text-red-700 text-lg mb-2">Vagas em Aberto:</h4><ul class="list-disc list-inside text-red-800">${needsForShift.map(need => `<li><strong>${need.sector}:</strong> ${need.reasonType}</li>`).join('')}</ul></div>` : '';
-                
+
                 const functionsHtml = Object.keys(shift.functions).length > 0 ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">${Object.entries(shift.functions)
                     .sort((a, b) => a[0].localeCompare(b[0]))
                     .map(([func, employees]) => {
@@ -1539,12 +1637,13 @@
                         if (searchTerm && filteredEmployees.length === 0) return ''; // Oculta setor se vazio na pesquisa
 
                         return `<div class="sector-card"><h4>${func}</h4><div class="space-y-2">${sortedEmployees.map(emp => {
-                            const isLeader = (responsibleName === emp.name.toUpperCase().trim()) || PRIORITY_LEADERS.map(n => n.toUpperCase()).includes(emp.name.toUpperCase().trim());
+                            const empName = emp.name ? emp.name.toUpperCase().trim() : '';
+                            const isLeader = (responsibleName === empName) || PRIORITY_LEADERS.map(n => n.toUpperCase()).includes(empName);
                             const leaderClass = isLeader ? 'leader-priority' : '';
                             return `<div class="employee-card bg-gray-50 rounded shadow-sm p-3 text-center ${isAdminLoggedIn ? 'cursor-pointer' : ''} ${emp.status === 'terminated' ? 'terminated' : ''} ${leaderClass}" data-factory-id="pneus" data-context-id="${shift.id}" data-sector-name="${func}" data-employee-id="${emp.id}">${emp.name}</div>`;
                         }).join('')}</div></div>`;
                     }).join('')}</div>` : `<p class="text-center text-gray-500 text-lg">${searchTerm ? 'Nenhum funcionário encontrado com este termo.' : 'Nenhum funcionário neste turno.'}</p>`;
-                
+
                 return `<div class="w-full max-w-6xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 lg:p-10 mx-auto printable-area"><div class="flex flex-wrap justify-between items-center gap-4 mb-4 no-print"><h2 class="text-3xl font-bold text-gray-800">Detalhes do Turno</h2><div class="flex items-center gap-2">${adminAddButton}<button data-action="print-page" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Imprimir</button></div></div><div class="print-header hidden"><svg viewBox="0 0 200 50" class="print-logo" fill="black"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg><h2 class="print-title">FABRECK PNEUS - ${shift.name}</h2></div><div class="bg-blue-100 rounded-lg p-5 mb-8 shadow-md text-center"><h2 class="text-3xl font-bold text-blue-900 mb-2">${shift.name}</h2><p class="text-blue-800 text-lg"><span class="font-semibold">Responsável:</span> ${shift.responsible}</p><p class="text-blue-800 text-lg"><span class="font-semibold">Horário:</span> ${shift.time}</p></div>${hiringNeedsHtml}<h3 class="text-2xl font-bold text-gray-800 mb-6 text-center border-b pb-3">Funcionários por Setor</h3>${functionsHtml}</div>`;
             }
 
@@ -1552,26 +1651,26 @@
                 const factory = factories[factoryId];
                 if (!factory) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const adminAddButton = isAdminLoggedIn ? `<button data-action="add-employee" data-factory-id="${factoryId}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition">Adicionar Funcionário</button>` : '';
-                
+
                 const allEmployees = getAllEmployeesFromFactory(factory);
                 const activeEmployeesCount = getActiveEmployees(allEmployees).length;
-                
+
                 const content = Object.keys(factory.sectors).length > 0 ? `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">${Object.entries(factory.sectors)
-                    .sort((a,b) => a[0].localeCompare(b[0]))
-                    .map(([sectorName, employees]) => { 
-                        
+                    .sort((a, b) => a[0].localeCompare(b[0]))
+                    .map(([sectorName, employees]) => {
+
                         const filteredEmployees = filterEmployees(employees);
 
                         if (searchTerm && filteredEmployees.length === 0) return '';
 
-                        const needsForSector = hiringNeeds.filter(need => need.factoryId === factoryId && need.sector === sectorName); 
-                        let hiringNeedsHtml = needsForSector.length > 0 ? `<div class="mt-4 pt-3 border-t border-blue-200"><h4 class="font-bold text-red-600 text-sm mb-1">VAGA EM ABERTO:</h4><ul class="list-disc list-inside text-sm text-red-800">${needsForSector.map(need => `<li>${need.reasonType === 'Nova Posição' ? 'Nova Posição' : 'Substituição'}</li>`).join('')}</ul></div>` : ''; 
-                        
-                        const activeSectorEmployees = getActiveEmployees(filteredEmployees).length; 
-                        
-                        return `<div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500"><h3 class="text-xl font-bold text-blue-800 mb-2">${sectorName}</h3><p class="text-gray-700 mt-2"><span class="font-semibold">Funcionários Ativos:</span> ${activeSectorEmployees}</p>${hiringNeedsHtml}</div>` 
+                        const needsForSector = hiringNeeds.filter(need => need.factoryId === factoryId && need.sector === sectorName);
+                        let hiringNeedsHtml = needsForSector.length > 0 ? `<div class="mt-4 pt-3 border-t border-blue-200"><h4 class="font-bold text-red-600 text-sm mb-1">VAGA EM ABERTO:</h4><ul class="list-disc list-inside text-sm text-red-800">${needsForSector.map(need => `<li>${need.reasonType === 'Nova Posição' ? 'Nova Posição' : 'Substituição'}</li>`).join('')}</ul></div>` : '';
+
+                        const activeSectorEmployees = getActiveEmployees(filteredEmployees).length;
+
+                        return `<div class="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500"><h3 class="text-xl font-bold text-blue-800 mb-2">${sectorName}</h3><p class="text-gray-700 mt-2"><span class="font-semibold">Funcionários Ativos:</span> ${activeSectorEmployees}</p>${hiringNeedsHtml}</div>`
                     }).join('')}</div>` : `<p class="text-center text-gray-500 text-lg">${searchTerm ? 'Nenhum funcionário encontrado com este termo.' : 'Nenhum setor cadastrado.'}</p>`;
-                
+
                 container.innerHTML = `<div class="printable-area"><div class="flex flex-wrap justify-between items-center gap-4 mb-4 no-print"><h2 class="text-3xl font-bold text-gray-800">Resumo de Setores ${factory.name}</h2><div class="flex items-center gap-2">${adminAddButton}<button data-action="print-page" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition">Imprimir</button></div></div><div class="print-header hidden"><svg viewBox="0 0 200 50" class="print-logo" fill="black"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg><h2 class="print-title">${factory.name.toUpperCase().replace('ORGANOGRAMA', 'FABRECK')} - RESUMO</h2></div><div class="text-center mb-8"><p class="text-xl text-gray-600">Total de Funcionários Ativos: ${activeEmployeesCount}</p></div>${content}</div>`;
             }
 
@@ -1579,41 +1678,42 @@
                 const factory = factories[factoryId];
                 if (!factory) { container.innerHTML = '<p>Carregando...</p>'; return; }
                 const adminAddButton = isAdminLoggedIn ? `<button data-action="add-employee" data-factory-id="${factoryId}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition">Adicionar Funcionário</button>` : '';
-                
+
                 const allEmployees = getAllEmployeesFromFactory(factory);
                 const activeEmployeesCount = getActiveEmployees(allEmployees).length;
-                
+
                 const topSectorsOrder = ["LÍDER DE PRODUÇÃO", "SUPORTE E ORGANIZAÇÃO", "ORGANIZAÇÃO E QUALIDADE"];
                 const allSectorEntries = Object.entries(factory.sectors);
-                
+
                 // Filtra e ordena setores de topo
                 const topSectorEntries = allSectorEntries.filter(([sectorName]) => topSectorsOrder.includes(sectorName.toUpperCase()))
                     .map(([name, emps]) => [name, filterEmployees(emps)]) // Filtra funcionários
                     .filter(([_, emps]) => emps.length > 0 || !searchTerm) // Oculta se vazio na pesquisa
                     .sort((a, b) => topSectorsOrder.indexOf(a[0].toUpperCase()) - topSectorsOrder.indexOf(b[0].toUpperCase()));
-                
+
                 // Filtra e ordena outros setores
                 const otherSectorEntries = allSectorEntries.filter(([sectorName]) => !topSectorsOrder.includes(sectorName.toUpperCase()))
                     .map(([name, emps]) => [name, filterEmployees(emps)]) // Filtra funcionários
                     .filter(([_, emps]) => emps.length > 0 || !searchTerm) // Oculta se vazio na pesquisa
                     .sort((a, b) => a[0].localeCompare(b[0]));
-                
+
                 const renderSector = (sectorName, employees, isLeaderSector = false) => {
                     // ORDENAÇÃO POR HIERARQUIA: 1º Líderes Explicitamente Nomeados, 2º Pelo array PRIORITY_LEADERS, 3º Alfabética
                     const sortedEmployees = sortEmployeesByHierarchy(employees);
 
                     return `<div class="sector-card ${isLeaderSector ? 'leader' : ''}"><h4>${sectorName}</h4><div class="space-y-2">${sortedEmployees.map(emp => {
-                        const isLeader = PRIORITY_LEADERS.map(n => n.toUpperCase()).includes(emp.name.toUpperCase().trim());
+                        const empName = emp.name ? emp.name.toUpperCase().trim() : '';
+                        const isLeader = PRIORITY_LEADERS.map(n => n.toUpperCase()).includes(empName);
                         const leaderClass = isLeader ? 'leader-priority' : '';
                         return `<div class="employee-card bg-gray-50 rounded shadow-sm p-3 text-center ${isAdminLoggedIn ? 'cursor-pointer' : ''} ${emp.status === 'terminated' ? 'terminated' : ''} ${leaderClass}" data-factory-id="${factoryId}" data-context-id="" data-sector-name="${sectorName}" data-employee-id="${emp.id}">${emp.name}</div>`;
                     }).join('')}</div></div>`;
                 };
-                
+
                 const topSectorsHtml = topSectorEntries.length > 0 ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">${topSectorEntries.map(([name, emps]) => renderSector(name, emps, true)).join('')}</div><hr class="my-8"/>` : '';
-                
+
                 const otherSectorsHtml = otherSectorEntries.length > 0 ? `<h3 class="text-2xl font-bold text-gray-700 mb-6 text-center">Setores de Produção</h3><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">${otherSectorEntries.map(([name, emps]) => renderSector(name, emps)).join('')}</div>` : '';
-                
-                const content = (topSectorsHtml.length + otherSectorsHtml.length) === 0 && searchTerm.length > 0 ? 
+
+                const content = (topSectorsHtml.length + otherSectorsHtml.length) === 0 && searchTerm.length > 0 ?
                     `<p class="text-center text-gray-500 text-lg">Nenhum funcionário ou setor encontrado com este termo.</p>` :
                     `${topSectorsHtml}${otherSectorsHtml}`;
 
@@ -1622,17 +1722,17 @@
 
 
             function renderHiringNeedsOverview() {
-                const resolveButton = (needId) => isAdminLoggedIn 
-                    ? `<button data-action="resolve-hiring-need" data-need-id="${needId}" class="ml-4 px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-md transition">Resolver Vaga</button>` 
+                const resolveButton = (needId) => isAdminLoggedIn
+                    ? `<button data-action="resolve-hiring-need" data-need-id="${needId}" class="ml-4 px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-md transition">Resolver Vaga</button>`
                     : '';
 
-                const content = hiringNeeds.length > 0 ? `<div class="space-y-6">${hiringNeeds.map(need => { 
-                    const factory = factories[need.factoryId]; 
-                    let contextLine = `<p class="text-sm text-gray-600">Fábrica: ${factory ? factory.name : 'N/A'}</p>`; 
-                    if (need.shiftId && factory?.shifts) { 
-                        const shift = factory.shifts.find(s => s.id === need.shiftId); 
-                        contextLine += `<p class="text-sm text-gray-600">Turno: ${shift ? shift.name : 'N/A'}</p>`; 
-                    } 
+                const content = hiringNeeds.length > 0 ? `<div class="space-y-6">${hiringNeeds.map(need => {
+                    const factory = factories[need.factoryId];
+                    let contextLine = `<p class="text-sm text-gray-600">Fábrica: ${factory ? factory.name : 'N/A'}</p>`;
+                    if (need.shiftId && factory?.shifts) {
+                        const shift = factory.shifts.find(s => s.id === need.shiftId);
+                        contextLine += `<p class="text-sm text-gray-600">Turno: ${shift ? shift.name : 'N/A'}</p>`;
+                    }
                     return `<div class="bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg p-4 shadow-md text-left">
                                 <div class="flex justify-between items-start">
                                     <div>
@@ -1653,9 +1753,9 @@
                                 <div class="flex justify-end mt-4">
                                     ${resolveButton(need.id)}
                                 </div>
-                            </div>` 
+                            </div>`
                 }).join('')}</div>` : `<p class="text-center text-gray-500 text-lg">Nenhuma necessidade de contratação registrada.</p>`;
-                
+
                 return `<div class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 lg:p-10 mx-auto"><div class="flex justify-between items-center mb-8"><h2 class="text-3xl font-bold text-gray-800">Necessidades de Contratação</h2><button data-action="add-hiring-need" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition ${!isAdminLoggedIn ? 'hidden' : ''}">Adicionar Nova</button></div>${content}</div>`;
             }
 
@@ -1670,14 +1770,14 @@
                     if (isNaN(dateA) || isNaN(dateB)) return 0;
                     return dateB - dateA;
                 });
-                const content = sortedLog.length > 0 ? `<div class="overflow-x-auto"><table class="min-w-full bg-white rounded-lg shadow"><thead class="bg-gray-200"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Funcionário</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Local</th></tr></thead><tbody class="divide-y divide-gray-200">${sortedLog.map(entry => `<tr><td class="px-6 py-4 whitespace-nowrap">${entry.date}</td><td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.type === 'ENTRADA' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${entry.type}</span></td><td class="px-6 py-4 whitespace-nowrap font-medium">${entry.employeeName}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${entry.context}</td></tr>`).join('')}</tbody></table></div>` : `<p class="text-center text-gray-500 text-lg">Nenhum registro de movimentação encontrado.</p>`;
-                return `<div class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 lg:p-10 mx-auto"><h2 class="text-3xl font-bold text-gray-800 mb-8 text-center">Log de Movimentações</h2>${content}</div>`;
+                const content = sortedLog.length > 0 ? `<div class="overflow-x-auto"><table class="min-w-full bg-white rounded-lg shadow"><thead class="bg-gray-200"><tr><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Funcionário</th><th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Local</th></tr></thead><tbody class="divide-y divide-gray-200">${sortedLog.map(entry => `<tr><td class="px-6 py-4 whitespace-nowrap">${entry.date}</td><td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${entry.type === 'ENTRADA' ? 'bg-green-100 text-green-800' : entry.type === 'SAÍDA' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}">${entry.type}</span></td><td class="px-6 py-4 whitespace-nowrap font-medium">${entry.employeeName}</td><td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${entry.context}</td></tr>`).join('')}</tbody></table></div>` : `<p class="text-center text-gray-500 text-lg">Nenhum registro de movimentação encontrado.</p>`;
+                return `<div class="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 lg:p-10 mx-auto"><h2 class="text-3xl font-bold text-gray-800 mb-8 text-center">Log de Movimentações (Detalhado)</h2>${content}</div>`;
             }
 
 
             function init() {
                 logoContainer.innerHTML = `<svg viewBox="0 0 200 50" class="w-full h-auto" fill="currentColor"><text x="10" y="40" font-family="Inter, sans-serif" font-size="35" font-weight="bold">FABRECK</text></svg>`;
-                
+
                 navigationContainer.addEventListener('click', handleNavClick);
                 mainContentArea.addEventListener('click', handleMainContentClick);
                 modalBody.addEventListener('click', handleModalEvents);
@@ -1685,20 +1785,16 @@
                 adminLoginBtn.addEventListener('click', loginAdmin);
                 adminPasswordInput.addEventListener('keyup', (e) => e.key === 'Enter' && loginAdmin());
                 adminLogoutBtn.addEventListener('click', logoutAdmin);
-                
+
                 modalCloseBtn.addEventListener('click', hideModal);
                 document.getElementById('confirm-modal-close-btn').addEventListener('click', hideConfirmModal);
                 document.getElementById('confirm-modal-cancel-btn').addEventListener('click', hideConfirmModal);
                 confirmModalOkBtn.addEventListener('click', () => { if (confirmCallback) { confirmCallback(true); confirmCallback = null; } hideConfirmModal(); });
-                
-                // REMOVIDO: Inicialização do estado de administrador do localStorage
-                // if (localStorage.getItem('isAdminLoggedIn') === 'true') {
-                //     isAdminLoggedIn = true;
-                // }
-                
-                window.addEventListener('online', autoSyncOfflineChanges);
+
+                // Acompanhamento do status de rede para feedback visual
+                window.addEventListener('online', updateOnlineStatus);
                 window.addEventListener('offline', updateOnlineStatus);
-                
+
                 initializeAppData();
             }
 
@@ -1706,7 +1802,7 @@
             return { init, handleSearch };
         })();
 
-        // --- Fix para o ReferenceError: App is not defined (expondo App ao escopo global para eventos inline) ---
+        // --- Fix para o ReferenceError: App is not defined ---
         window.App = App;
 
         // --- Start the application ---
@@ -1714,4 +1810,5 @@
 
     </script>
 </body>
+
 </html>
