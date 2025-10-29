@@ -337,21 +337,21 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         // =======================================================================================================
-        // 🚨 CONFIGURAÇÃO MANUAL DO FIREBASE (PARA USO EXTERNO) 🚨
-        // VOCÊ DEVE PREENCHER ESTES CAMPOS COM SUAS CREDENCIAIS
+        // 🚨 CONFIGURAÇÃO MANUAL DO FIREBASE PARA GITHUB PAGES 🚨
+        // AS CHAVES FORAM ATUALIZADAS COM A CONFIGURAÇÃO FORNECIDA POR VOCÊ.
+        // O aplicativo tentará se conectar ao projeto "pcp-maquinas".
         // =======================================================================================================
         const YOUR_FIREBASE_CONFIG = {
-            apiKey: "YOUR_API_KEY_HERE", 
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID_HERE", 
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID_HERE",
-            appId: "YOUR_APP_ID_HERE"
+            apiKey: "AIzaSyAXm-X298TIleTU9XUAKowPiKHaecmzGGU", 
+            authDomain: "pcp-maquinas.firebaseapp.com",
+            projectId: "pcp-maquinas", 
+            storageBucket: "pcp-maquinas.firebasestorage.app",
+            messagingSenderId: "323750214558",
+            appId: "1:323750214558:web:b34e11aef60b0ecfc1b48f"
         };
         
         // CHAVE MANUAL DO DOCUMENTO DO FIRESTORE (Coleção/Documento)
-        // COLEÇÃO: organogram_data
-        // DOCUMENTO: fabreck-organograma-v1
+        // MANTENHA ESTES VALORES CONSISTENTES ENTRE OS DISPOSITIVOS
         const FIREBASE_DOC_ID = "fabreck-organograma-v1";
         const FIREBASE_COLLECTION = "organogram_data";
 
@@ -367,18 +367,21 @@
             let docPath;
             
             if (USE_GEMINI_ENV) {
-                // Configuração específica para o ambiente Gemini
+                // Configuração específica para o ambiente Gemini (usando as variáveis de ambiente)
                 const appId = __app_id;
                 config = JSON.parse(__firebase_config);
                 // O caminho no Gemini precisa seguir a estrutura de segurança: /artifacts/{appId}/public/data/{collection}/{docId}
                 docPath = `artifacts/${appId}/public/data/${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
             } else {
-                // Configuração para ambiente externo (Sua própria configuração)
+                // Configuração para ambiente externo (GitHub Pages, usando as chaves fixas)
                 config = YOUR_FIREBASE_CONFIG;
-                docPath = `${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`; // Caminho simples
+                docPath = `${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`; // Caminho simples para Firebase padrão
 
+                // Verifica se o usuário preencheu as chaves (agora elas estão preenchidas!)
                 if (config.apiKey === "YOUR_API_KEY_HERE") {
-                    console.warn("ALERTA: Configurações do Firebase não preenchidas. O aplicativo só funcionará se estiver rodando no Gemini ou se você preencher suas chaves.");
+                    console.warn("ALERTA: Configurações do Firebase não preenchidas. O aplicativo só funcionará se você preencher suas chaves.");
+                } else {
+                    console.info("Configurações do Firebase carregadas com sucesso para o projeto pcp-maquinas!");
                 }
             }
             
