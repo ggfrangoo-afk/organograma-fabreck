@@ -338,8 +338,7 @@
 
         // =======================================================================================================
         // 🚨 CONFIGURAÇÃO MANUAL DO FIREBASE PARA GITHUB PAGES 🚨
-        // AS CHAVES FORAM ATUALIZADAS COM A CONFIGURAÇÃO FORNECIDA POR VOCÊ.
-        // O aplicativo tentará se conectar ao projeto "pcp-maquinas".
+        // As suas credenciais do projeto 'pcp-maquinas' foram inseridas aqui.
         // =======================================================================================================
         const YOUR_FIREBASE_CONFIG = {
             apiKey: "AIzaSyAXm-X298TIleTU9XUAKowPiKHaecmzGGU", 
@@ -350,54 +349,78 @@
             appId: "1:323750214558:web:b34e11aef60b0ecfc1b48f"
         };
         
-        // CHAVE MANUAL DO DOCUMENTO DO FIRESTORE (Coleção/Documento)
-        // MANTENHA ESTES VALORES CONSISTENTES ENTRE OS DISPOSITIVOS
+        // CHAVE DE DADOS LOCAIS E FIREBASE
+        const LOCAL_STORAGE_KEY = 'fabreckOrgData'; // Chave para salvar no localStorage
         const FIREBASE_DOC_ID = "fabreck-organograma-v1";
         const FIREBASE_COLLECTION = "organogram_data";
 
-        const USE_GEMINI_ENV = typeof __app_id !== 'undefined'; 
-        // =======================================================================================================
+        // Variáveis de ambiente Canvas (acesso seguro para evitar ReferenceError)
+        const CANVAS_APP_ID = typeof window.__app_id !== 'undefined' ? window.__app_id : null;
+        const CANVAS_CONFIG_JSON = typeof window.__firebase_config !== 'undefined' ? window.__firebase_config : null;
+        const CANVAS_AUTH_TOKEN = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
         
-        let db;
-        let auth;
-        let ORG_DATA_REF;
+        let db = null;
+        let auth = null;
+        let ORG_DATA_REF = null;
+        let isFirebaseActive = false; // Novo flag de estado
+        let isAppReady = false;
 
         try {
             let config;
             let docPath;
             
-            if (USE_GEMINI_ENV) {
-                // Configuração específica para o ambiente Gemini (usando as variáveis de ambiente)
-                const appId = __app_id;
-                config = JSON.parse(__firebase_config);
-                // O caminho no Gemini precisa seguir a estrutura de segurança: /artifacts/{appId}/public/data/{collection}/{docId}
-                docPath = `artifacts/${appId}/public/data/${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
+            // 1. Configurações e Caminho do Documento
+            if (CANVAS_APP_ID) {
+                config = JSON.parse(CANVAS_CONFIG_JSON);
+                docPath = `artifacts/${CANVAS_APP_ID}/public/data/${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
             } else {
-                // Configuração para ambiente externo (GitHub Pages, usando as chaves fixas)
                 config = YOUR_FIREBASE_CONFIG;
-                docPath = `${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`; // Caminho simples para Firebase padrão
-
-                // Verifica se o usuário preencheu as chaves (agora elas estão preenchidas!)
-                if (config.apiKey === "YOUR_API_KEY_HERE") {
-                    console.warn("ALERTA: Configurações do Firebase não preenchidas. O aplicativo só funcionará se você preencher suas chaves.");
-                } else {
-                    console.info("Configurações do Firebase carregadas com sucesso para o projeto pcp-maquinas!");
-                }
+                docPath = `${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
             }
             
-            // 1. Initialize Firebase App
+            // 2. Initialize Firebase App e Services
             const app = initializeApp(config);
-            // 2. Initialize Services
             db = getFirestore(app);
             auth = getAuth(app);
-            // 3. Define Document Reference
             ORG_DATA_REF = doc(db, docPath);
-            
-            // Enable Firestore debug logging
+            isFirebaseActive = true; // Marca como ativo se a inicialização for bem-sucedida
             setLogLevel('Debug');
         } catch (e) {
-            console.error("Erro na inicialização do Firebase:", e);
-            document.getElementById('syncStatus').textContent = `Erro: ${e.message || 'Firebase não configurado.'}`;
+            console.error("Erro FATAL na inicialização do Firebase. Usando modo local.", e);
+            document.getElementById('syncStatus').textContent = `Erro Fatal: Modo Local`;
+            isFirebaseActive = false; // Força o modo local
+        }
+        
+        // --- Funções de Fallback para LocalStorage ---
+        function saveDataLocal() {
+            try {
+                const dataToSave = { factories, hiringNeeds, log };
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
+                document.getElementById('syncStatus').textContent = `Salvo Localmente (${new Date().toLocaleTimeString('pt-BR')})`;
+                document.getElementById('syncStatus').style.backgroundColor = '#5D6D7E'; // Cinza para local
+                document.getElementById('syncStatus').style.color = '#FFFFFF';
+                showMessage('Alterações salvas localmente (Modo Offline).', 'info');
+            } catch (e) {
+                console.error("Erro ao salvar no LocalStorage:", e);
+                showMessage('Falha ao salvar localmente. Espaço insuficiente?', 'error');
+            }
+        }
+        
+        function loadDataFromLocal() {
+            try {
+                const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (savedData) {
+                    const parsedData = JSON.parse(savedData);
+                    factories = parsedData.factories || initialFactoriesData;
+                    hiringNeeds = parsedData.hiringNeeds || initialHiringNeedsData;
+                    log = parsedData.log || initialLogData;
+                    console.log("Dados carregados do LocalStorage.");
+                    return true;
+                }
+            } catch (e) {
+                console.error("Erro ao carregar do LocalStorage:", e);
+            }
+            return false;
         }
 
         // --- Dados Iniciais (Para a primeira vez que o documento é criado) ---
@@ -740,7 +763,6 @@
             let searchTerm = '';
             const ADMIN_PASSWORD = "FBK2025";
             let confirmCallback = null;
-            let isAppReady = false;
 
             // LÍDERES PRIORITÁRIOS: Nomes que devem vir sempre em primeiro no seu setor.
             const PRIORITY_LEADERS = ["BOMBADO", "XANDECO", "LUIS"];
@@ -876,13 +898,56 @@
                 });
             };
 
-            // --- FIREBASE: Funções de Persistência e Sincronização ---
+            // --- Lógica de Salvamento e Carregamento (Firebase e Local) ---
+            
             /**
-             * Salva o estado atual do aplicativo no Firestore.
+             * Salva dados no LocalStorage como fallback.
+             */
+            function saveDataLocal() {
+                try {
+                    const dataToSave = { factories, hiringNeeds, log };
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
+                    syncStatus.textContent = `Salvo Localmente (${new Date().toLocaleTimeString('pt-BR')})`;
+                    syncStatus.style.backgroundColor = '#5D6D7E'; // Cinza para local
+                    syncStatus.style.color = '#FFFFFF';
+                    showMessage('Alterações salvas localmente (Modo Offline).', 'info');
+                } catch (e) {
+                    console.error("Erro ao salvar no LocalStorage:", e);
+                    showMessage('Falha ao salvar localmente. Espaço insuficiente?', 'error');
+                }
+            }
+            
+            /**
+             * Carrega dados do LocalStorage.
+             * @returns {boolean} True se os dados foram carregados localmente, caso contrário, false.
+             */
+            function loadDataFromLocal() {
+                try {
+                    const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+                    if (savedData) {
+                        const parsedData = JSON.parse(savedData);
+                        factories = parsedData.factories || initialFactoriesData;
+                        hiringNeeds = parsedData.hiringNeeds || initialHiringNeedsData;
+                        log = parsedData.log || initialLogData;
+                        console.log("Dados carregados do LocalStorage.");
+                        return true;
+                    }
+                } catch (e) {
+                    console.error("Erro ao carregar do LocalStorage:", e);
+                }
+                return false;
+            }
+
+            /**
+             * Salva o estado atual do aplicativo no Firestore (tentativa primária).
+             * Usa LocalStorage como fallback em caso de falha.
              * @param {boolean} isSilent - Se deve suprimir mensagens de sucesso.
              */
             async function saveData(isSilent = false) {
-                if (!auth?.currentUser || !ORG_DATA_REF) return;
+                if (!isFirebaseActive || !auth?.currentUser || !ORG_DATA_REF) {
+                    // Se o Firebase não estiver ativo ou autenticado, salva localmente e sai.
+                    return saveDataLocal();
+                }
 
                 syncStatus.textContent = 'A sincronizar com Firestore...';
                 syncStatus.style.backgroundColor = '#F39C12'; // Laranja
@@ -901,11 +966,10 @@
                     syncStatus.style.color = '#FFFFFF';
                     if (!isSilent) showMessage('Alterações salvas e sincronizadas na nuvem.', 'success');
                 } catch (error) {
-                    console.error("Erro ao salvar no Firestore:", error);
-                    syncStatus.textContent = 'Erro de sincronização';
-                    syncStatus.style.backgroundColor = '#E74C3C'; // Vermelho
-                    syncStatus.style.color = '#FFFFFF';
-                    showMessage('Falha ao sincronizar os dados com o Firestore.', 'error');
+                    console.error("Erro ao salvar no Firestore. Fallback para LocalStorage.", error);
+                    // Em caso de falha na escrita, salva localmente.
+                    saveDataLocal();
+                    showMessage('Falha ao sincronizar com o Firestore. Salvo localmente.', 'error');
                 }
             }
 
@@ -913,28 +977,34 @@
              * Inicializa o documento no Firestore com dados iniciais se não existir.
              */
             async function initializeFirstTimeData() {
-                if (!ORG_DATA_REF) return;
+                // Tenta carregar localmente primeiro
+                if (loadDataFromLocal()) {
+                    isAppReady = true;
+                    updateUI();
+                    return; // Sai se carregou do local
+                }
 
-                console.log("Firestore document not found. Initializing with default data...");
+                // Se não houver dados locais, usa dados iniciais e tenta salvar (Firebase ou Local)
+                console.log("No local data found. Initializing with default data...");
                 factories = JSON.parse(JSON.stringify(initialFactoriesData));
                 hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
                 log = JSON.parse(JSON.stringify(initialLogData));
 
-                // Seed the document in Firestore
-                await saveData(true); // Saves silently
+                // Tenta salvar pela primeira vez (o que irá para o Firebase ou Local)
+                await saveData(true); // Salva silenciosamente
 
                 if (!isAppReady) {
                     isAppReady = true;
                     updateUI();
                 }
-                showMessage('Dados iniciais criados e salvos no Firestore.', 'success');
+                showMessage('Dados iniciais carregados.', 'success');
             }
 
             /**
              * Escuta alterações no Firestore em tempo real.
              */
             function setupRealtimeListener() {
-                if (!ORG_DATA_REF) return;
+                if (!isFirebaseActive || !ORG_DATA_REF) return;
 
                 onSnapshot(ORG_DATA_REF, (docSnapshot) => {
                     const syncStatus = document.getElementById('syncStatus');
@@ -966,20 +1036,26 @@
                             }
                         }
                     } else {
-                        // Document does not exist (first time access)
+                        // Documento não existe no Firebase (acesso pela primeira vez)
                         if (!isAppReady) {
                             initializeFirstTimeData();
                         } else {
-                            // If the app was running and the document was deleted, try recreating.
-                            console.warn("Documento Firestore não existe. Recriando com dados atuais...");
+                            console.warn("Documento Firestore não existe. Recriando...");
                             initializeFirstTimeData();
                         }
                     }
                     updateOnlineStatus();
                 }, (error) => {
-                    console.error("Erro no listener do Firestore:", error);
-                    syncStatus.textContent = 'Erro de Conexão: Firestore';
+                    console.error("Erro no listener do Firestore. Desativando Firebase.", error);
+                    isFirebaseActive = false; // Desativa o Firebase no erro
+                    syncStatus.textContent = 'Erro de Conexão: Modo Local';
                     syncStatus.style.backgroundColor = '#E74C3C';
+                    // Tenta carregar ou inicializar localmente após a falha do listener
+                    if (!isAppReady) {
+                        initializeFirstTimeData();
+                    } else {
+                        saveDataLocal(); // Salva qualquer alteração recente no local
+                    }
                 });
             }
 
@@ -989,10 +1065,13 @@
                     syncStatus.textContent = 'Offline (Aguardando rede)';
                     syncStatus.style.backgroundColor = '#5D6D7E';
                     syncStatus.style.color = '#FFFFFF';
+                } else if (!isFirebaseActive) {
+                    syncStatus.textContent = 'Modo Local (Firebase Desativado)';
+                    syncStatus.style.backgroundColor = '#E74C3C';
                 }
-                // Se estiver online, o status do Firebase (verde ou vermelho) prevalece.
+                // Se estiver online e ativo, o status do Firebase (verde ou laranja) prevalece.
             }
-
+            
             // --- Funções de Manipulação de Dados (CRUD) ---
             function handleAddEmployee(factoryId, contextId = null) {
                 const factory = factories[factoryId];
@@ -1418,23 +1497,34 @@
 
             // Update the main initialization function
             async function initializeAppData() {
-                // 1. Display loading message
-                mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-gray-600 animate-pulse">A conectar com Firebase...</p></div>`;
-                syncStatus.textContent = 'A conectar...';
-                syncStatus.style.backgroundColor = '#F39C12';
-                syncStatus.style.color = '#FFFFFF';
+                
+                // 1. Tenta carregar dados locais se o Firebase falhou na inicialização (isFirebaseActive = false)
+                if (!isFirebaseActive || !CANVAS_AUTH_TOKEN) {
+                    if (loadDataFromLocal()) {
+                        syncStatus.textContent = 'Modo Local Ativado';
+                        syncStatus.style.backgroundColor = '#E74C3C';
+                        isAppReady = true;
+                        updateUI();
+                        return;
+                    }
+                }
 
-                if (!auth || !db) return; // Se a inicialização do Firebase falhou, pare aqui.
-
-                // 2. Perform Firebase Authentication
+                // 2. Tenta Autenticar no Firebase (somente se isFirebaseActive for true)
+                if (!isFirebaseActive) {
+                    // Se não for possível inicializar o Firebase e não houver dados locais, carrega os dados iniciais
+                    factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                    hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                    log = JSON.parse(JSON.stringify(initialLogData));
+                    syncStatus.textContent = 'Erro Fatal: Carregado Padrão';
+                    isAppReady = true;
+                    updateUI();
+                    return;
+                }
+                
                 try {
-                    if (USE_GEMINI_ENV) {
+                    if (CANVAS_AUTH_TOKEN) {
                         // Autenticação Específica Gemini
-                        if (typeof __initial_auth_token !== 'undefined') {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
+                        await signInWithCustomToken(auth, CANVAS_AUTH_TOKEN);
                     } else {
                         // Autenticação Padrão para ambiente externo (login anônimo)
                         await signInAnonymously(auth);
@@ -1446,10 +1536,23 @@
 
                 } catch (error) {
                     console.error("Erro de autenticação Firebase:", error);
-                    syncStatus.textContent = 'Erro de autenticação';
-                    syncStatus.style.backgroundColor = '#E74C3C';
-                    mainContentArea.innerHTML = `<div class="w-full max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8 text-center"><p class="text-xl text-red-600">Falha na Autenticação Firebase. Consulte o console para detalhes.</p></div>`;
-                    return;
+                    isFirebaseActive = false;
+                    
+                    if (loadDataFromLocal()) {
+                        syncStatus.textContent = 'Falha Auth: Modo Local';
+                        syncStatus.style.backgroundColor = '#E74C3C';
+                        isAppReady = true;
+                        updateUI();
+                    } else {
+                        // Se falhar a autenticação E não houver dados locais, carrega iniciais
+                        factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                        hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                        log = JSON.parse(JSON.stringify(initialLogData));
+                        syncStatus.textContent = 'Falha Auth: Carregado Padrão';
+                        syncStatus.style.backgroundColor = '#E74C3C';
+                        isAppReady = true;
+                        updateUI();
+                    }
                 }
             }
 
