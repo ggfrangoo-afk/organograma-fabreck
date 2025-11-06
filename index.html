@@ -353,6 +353,9 @@
         const LOCAL_STORAGE_KEY = 'fabreckOrgData'; // Chave para salvar no localStorage
         const FIREBASE_DOC_ID = "fabreck-organograma-v1";
         const FIREBASE_COLLECTION = "organogram_data";
+        
+        // VARIÁVEL EXPLICITA DO ARTIFACT ID FORNECIDA PELO USUÁRIO.
+        const EXPLICIT_ARTIFACT_ID = "studio-8012160956";
 
         // Variáveis de ambiente Canvas (acesso seguro para evitar ReferenceError)
         const CANVAS_APP_ID = typeof window.__app_id !== 'undefined' ? window.__app_id : null;
@@ -361,31 +364,35 @@
         
         let db = null;
         let auth = null;
-        let ORG_DATA_REF = null;
+        // ORG_DATA_REF será definido APÓS a autenticação
+        let ORG_DATA_REF = null; 
         let isFirebaseActive = false; // Novo flag de estado
         let isAppReady = false;
 
         try {
-            let config;
-            let docPath;
+            // Valores padrão (modo manual)
+            let config = YOUR_FIREBASE_CONFIG;
             
-            // 1. Configurações e Caminho do Documento
-            if (CANVAS_APP_ID) {
-                config = JSON.parse(CANVAS_CONFIG_JSON);
-                docPath = `artifacts/${CANVAS_APP_ID}/public/data/${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
-            } else {
-                config = YOUR_FIREBASE_CONFIG;
-                docPath = `${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
+            // 1. Tenta usar as configurações do ambiente Canvas
+            if (CANVAS_APP_ID && CANVAS_CONFIG_JSON) {
+                try {
+                    config = JSON.parse(CANVAS_CONFIG_JSON);
+                } catch (parseError) {
+                    console.warn("Falha ao parsear CANVAS_CONFIG_JSON. Usando configuração manual.", parseError);
+                }
             }
             
-            // 2. Initialize Firebase App e Services
+            // 2. Initialize Firebase App e Services (DB e AUTH)
             const app = initializeApp(config);
             db = getFirestore(app);
             auth = getAuth(app);
-            ORG_DATA_REF = doc(db, docPath);
+            
+            // 🚨 Importante: A referência ORG_DATA_REF só será definida DENTRO de initializeAppData, após a autenticação.
+            
             isFirebaseActive = true; // Marca como ativo se a inicialização for bem-sucedida
             setLogLevel('Debug');
         } catch (e) {
+            // Se falhar aqui, a aplicação usará o modo local (LocalStorage).
             console.error("Erro FATAL na inicialização do Firebase. Usando modo local.", e);
             document.getElementById('syncStatus').textContent = `Erro Fatal: Modo Local`;
             isFirebaseActive = false; // Força o modo local
@@ -434,26 +441,29 @@
                     "time": "06:00-15:45 e 07:30-17:15",
                     "responsible": "Jacaré",
                     "functions": {
-                        "CALDEIRA": [{ "id": "francisco", "name": "FRANCISCO", "status": "active" }],
-                        "CORTE CAMELBACK": [{ "id": "cristhian", "name": "CRISTHIAN", "status": "active" }],
-                        "PINTURA": [{ "id": "gabriel", "name": "GABRIEL", "status": "active" }],
+                        // ATUALIZADO COM JACARE T1.PDF
+                        "CALDEIRA": [{ "id": "francisco", "name": "FRANCISCO RODRIGUES TRINDADE", "status": "active" }],
+                        "CORTE CAMELBACK": [{ "id": "cristhian", "name": "KAWAN RODRIGUES", "status": "active" }],
+                        "PINTURA": [{ "id": "gabriel", "name": "GABRIEL HENRIQUE DOS SANTOS", "status": "active" }],
                         "CORTE DE LONA": [
-                            { "id": "angelica", "name": "ANGELICA", "status": "active" },
-                            { "id": "rebeca", "name": "REBECA", "status": "active" },
-                            { "id": "antonia", "name": "ANTONIA", "status": "active" }
+                            { "id": "angelica", "name": "ANGELICA GIANELLI", "status": "active" },
+                            { "id": "rebeca", "name": "REBECA FLORIDEO CALDERA", "status": "active" },
+                            { "id": "antonia", "name": "ANTONIA ALISMA", "status": "active" }
                         ],
                         "CONSTRUÇÃO": [
-                            { "id": "gustavo", "name": "GUSTAVO", "status": "active" },
-                            { "id": "miriam", "name": "MIRIAM", "status": "active" },
-                            { "id": "vanderleia", "name": "VANDERLEIA", "status": "active" }
+                            { "id": "gustavo", "name": "LUIZ GUSTAVO DE MEDEIROS", "status": "active" },
+                            { "id": "miriam", "name": "MIRIAM LOPES DA SILVA", "status": "active" },
+                            { "id": "vanderleia", "name": "VANDERLEYA VIEIRA", "status": "active" },
+                            { "id": "vitor", "name": "VITOR GARDIM", "status": "active" }
                         ],
                         "REBARBA E INSPEÇÃO": [
-                            { "id": "poliane-m", "name": "POLIANE", "status": "active" },
-                            { "id": "eduarda", "name": "EDUARDA", "status": "active" }
+                            // CORRIGIDO: Poliane com nome completo + Diego
+                            { "id": "poliane-m", "name": "POLIANE RODRIGUES DE OLIVEIRA", "status": "active" },
+                            { "id": "diego-s-caldera", "name": "DIEGO SAMUEL CALDERA", "status": "active" }
                         ],
                         "OPERADOR EMPILHADEIRA": [{ "id": "roberto-kobayashi", "name": "ROBERTO KOBAYASHI", "status": "active" }],
                         "VULCANIZAÇÃO": [{ "id": "pedro-toneli", "name": "PEDRO TONELI", "status": "active" }],
-                        "MANUTENÇÃO": []
+                        "MANUTENÇÃO": [{ "id": "reginaldo-m", "name": "REGINALDO MENDONÇA", "status": "active" }]
                     }
                 }, {
                     "id": "afternoon-shift",
@@ -461,19 +471,23 @@
                     "time": "13:00-22:45",
                     "responsible": "Brendo",
                     "functions": {
-                        "CALDEIRA": [{ "id": "tales", "name": "TARLES PEREIRA CABRAL", "status": "active" }],
-                        "CORTE CAMELBACK": [{ "id": "maicon", "name": "MAICON", "status": "active" }],
+                        // ATUALIZADO COM JACARE T2.PDF
+                        "CALDEIRA": [{ "id": "tales", "name": "TARLIS PEREIRA CABRAL", "status": "active" }],
+                        "CORTE CAMELBACK": [{ "id": "maicon", "name": "HURI GOBES", "status": "active" }],
                         "PINTURA": [{ "id": "eliel", "name": "ELIEL LEITE BARBOSA", "status": "active" }],
-                        "CORTE DE LONA": [{ "id": "vanessa", "name": "VANESSA", "status": "active" }],
+                        "CORTE DE LONA": [
+                            { "id": "vanessa", "name": "VANESSA PANOINKO DANTAS", "status": "active" },
+                            { "id": "kaique-sob", "name": "KAIQUE SANTOS SOBRAL", "status": "active" }
+                        ],
                         "CONSTRUÇÃO": [
-                            { "id": "franklin", "name": "FRANKLIN JUNIOR DOS SANTOS ARAUJO", "status": "active" },
+                            { "id": "franklin", "name": "FRANKILIN JUNIOR DOS SANTOS ARAUJO", "status": "active" },
                             { "id": "matheus", "name": "MATHEUS MAURICIO", "status": "active" },
-                            { "id": "yuri", "name": "IURI GOBES", "status": "active" }
+                            { "id": "yuri", "name": "YURI GOBES", "status": "active" }
                         ],
                         "TALÃO": [{ "id": "rian", "name": "RYAN MELLO VIANA", "status": "active" }],
-                        "REBARBA E INSPEÇÃO": [{ "id": "poliane-t", "name": "POLIANE", "status": "active" }],
-                        "VULCANIZAÇÃO": [{ "id": "kaique", "name": "KAIQUE", "status": "active" }],
-                        "MANUTENÇÃO": []
+                        "REBARBA E INSPEÇÃO": [{ "id": "poliane-t", "name": "POLIANE RODRIGUES DE OLIVEIRA", "status": "active" }],
+                        "VULCANIZAÇÃO": [{ "id": "luiz-a-santos", "name": "LUIZ ALBERTO DOS SANTOS", "status": "active" }],
+                        "MANUTENÇÃO": [] // VAGA ABERTA
                     }
                 }, {
                     "id": "night-shift",
@@ -481,14 +495,15 @@
                     "time": "22:00-06:00",
                     "responsible": "Válber",
                     "functions": {
+                        // ATUALIZADO COM JACARE T3.PDF
                         "CALDEIRA": [{ "id": "thiago-de-mello", "name": "THIAGO DE MELLO", "status": "active" }],
                         "CORTE CAMELBACK": [{ "id": "juvenal-neto", "name": "JUVENAL NETO", "status": "active" }],
-                        "CONSTRUÇÃO": [{ "id": "thiago-marreta", "name": "THIAGO MARRETA", "status": "active" }],
+                        "CONSTRUÇÃO": [{ "id": "thiago-marreta", "name": "THIAGO PEREIRA FRANGILO", "status": "active" }],
                         "TALÃO": [{ "id": "laercio-moreira-junior", "name": "LAÉRCIO MOREIRA JUNIOR", "status": "active" }],
-                        "REBARBA E INSPEÇÃO": [{ "id": "eliane", "name": "ELIANE", "status": "active" }],
+                        "REBARBA E INSPEÇÃO": [{ "id": "eliane", "name": "ELIANE BATISTA", "status": "active" }],
                         "VULCANIZAÇÃO": [
                             { "id": "pedro-henrique-silvestre", "name": "PEDRO HENRIQUE SILVESTRE", "status": "active" },
-                            { "id": "eduardo", "name": "EDUARDO", "status": "active" }
+                            { "id": "eduardo", "name": "EDUARDO ALGUSTO DOS SANTOS", "status": "active" }
                         ],
                         "MANUTENÇÃO": []
                     }
@@ -613,6 +628,7 @@
             }
         };
         const initialHiringNeedsData = [{
+            // CORTE DE LONA: GISLAINE removida (T2) - MANTER VAGA
             "id": "need-1756345798366",
             "factoryId": "pneus",
             "shiftId": "afternoon-shift",
@@ -624,6 +640,7 @@
             "keyResponsibilities": "CORTE DE LONA",
             "notes": ""
         }, {
+            // MANUTENÇÃO: JOSE LUAN removida (T2) - MANTER VAGA
             "id": "need-1756345940750",
             "factoryId": "pneus",
             "shiftId": "afternoon-shift",
@@ -635,6 +652,7 @@
             "keyResponsibilities": "MANUTENÇÃO EM GERAL",
             "notes": ""
         }, {
+            // VULCANIZAÇÃO: HIGOR GONÇALVES removida (T2) - MANTER VAGA
             "id": "need-1756346054742",
             "factoryId": "pneus",
             "shiftId": "afternoon-shift",
@@ -646,28 +664,7 @@
             "keyResponsibilities": "VULCANIZAÇÃO E REVEZAMENTO ENTRE SETORES",
             "notes": ""
         }, {
-            "id": "need-1756358565793",
-            "factoryId": "injetoraPcs",
-            "shiftId": null,
-            "sector": "OPERADO DE MÁQ / INJETORAS - PEÇAS",
-            "reasonType": "Desligamento de Funcionário",
-            "employeeToReplace": "JHEMMY",
-            "departureDate": "",
-            "expectedStartDate": "",
-            "keyResponsibilities": "OPERADOR DE MAQUINA",
-            "notes": ""
-        }, {
-            "id": "need-1756381764053",
-            "factoryId": "bAro",
-            "shiftId": null,
-            "sector": "LIXADEIRAS",
-            "reasonType": "Nova Posição",
-            "employeeToReplace": "",
-            "departureDate": "",
-            "expectedStartDate": "2025-10-01",
-            "keyResponsibilities": "Lixadeiras",
-            "notes": "Ja efetivamos Guilherme, agora só falta a mais um funcionário "
-        }, {
+            // TALÃO: LUAN removido (T1) - MANTER VAGA
             "id": "need-1756384192623",
             "factoryId": "pneus",
             "shiftId": "morning-shift",
@@ -679,6 +676,7 @@
             "keyResponsibilities": "",
             "notes": ""
         }, {
+            // VULCANIZAÇÃO: RONALDO removido (T1) - MANTER VAGA
             "id": "need-1756384246945",
             "factoryId": "pneus",
             "shiftId": "morning-shift",
@@ -689,6 +687,30 @@
             "expectedStartDate": "",
             "keyResponsibilities": "Vulcanização ",
             "notes": "Nao está comparecendo trabalho."
+        }, {
+            // Vaga B-Aro (MANTIDA)
+            "id": "need-1756381764053",
+            "factoryId": "bAro",
+            "shiftId": null,
+            "sector": "LIXADEIRAS",
+            "reasonType": "Nova Posição",
+            "employeeToReplace": "",
+            "departureDate": "",
+            "expectedStartDate": "2025-10-01",
+            "keyResponsibilities": "Lixadeiras",
+            "notes": "Ja efetivamos Guilherme, agora só falta a mais um funcionário "
+        }, {
+            // Vaga Injetora Pcs (MANTIDA)
+            "id": "need-1756358565793",
+            "factoryId": "injetoraPcs",
+            "shiftId": null,
+            "sector": "OPERADO DE MÁQ / INJETORAS - PEÇAS",
+            "reasonType": "Desligamento de Funcionário",
+            "employeeToReplace": "JHEMMY",
+            "departureDate": "",
+            "expectedStartDate": "",
+            "keyResponsibilities": "OPERADOR DE MAQUINA",
+            "notes": ""
         }];
         const initialLogData = [{
             "id": "log-initial-1", "type": "SAÍDA", "date": "26/09/2025", "employeeName": "GISLAINE", "context": "Pneus / TURNO DA TARDE / CORTE DE LONA"
@@ -907,9 +929,9 @@
                 try {
                     const dataToSave = { factories, hiringNeeds, log };
                     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
-                    syncStatus.textContent = `Salvo Localmente (${new Date().toLocaleTimeString('pt-BR')})`;
-                    syncStatus.style.backgroundColor = '#5D6D7E'; // Cinza para local
-                    syncStatus.style.color = '#FFFFFF';
+                    document.getElementById('syncStatus').textContent = `Salvo Localmente (${new Date().toLocaleTimeString('pt-BR')})`;
+                    document.getElementById('syncStatus').style.backgroundColor = '#5D6D7E'; // Cinza para local
+                    document.getElementById('syncStatus').style.color = '#FFFFFF';
                     showMessage('Alterações salvas localmente (Modo Offline).', 'info');
                 } catch (e) {
                     console.error("Erro ao salvar no LocalStorage:", e);
@@ -1046,10 +1068,19 @@
                     }
                     updateOnlineStatus();
                 }, (error) => {
+                    // ** AQUI O ERRO DE PERMISSÃO OCORRE **
                     console.error("Erro no listener do Firestore. Desativando Firebase.", error);
                     isFirebaseActive = false; // Desativa o Firebase no erro
                     syncStatus.textContent = 'Erro de Conexão: Modo Local';
                     syncStatus.style.backgroundColor = '#E74C3C';
+                    
+                    // Tratamento de erro específico para a UI.
+                    if (error.message && error.message.includes('permission')) {
+                        showMessage('Erro de Permissão: Falha ao conectar ao Firestore. Usando modo local.', 'error');
+                    } else {
+                        showMessage('Falha no Listener do Firestore. Usando modo local.', 'error');
+                    }
+
                     // Tenta carregar ou inicializar localmente após a falha do listener
                     if (!isAppReady) {
                         initializeFirstTimeData();
@@ -1295,7 +1326,7 @@
 
                     if (factory?.shifts) {
                         shiftContainer.classList.remove('hidden');
-                        shiftContainer.innerHTML = `<label class="block text-sm font-medium text-gray-700">Turno</label><select id="hiring-need-shift" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Todos</option>${factory.shifts.map(s => `<option value="${s.id}" ${prefill.shiftId === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}</select>`;
+                        shiftContainer.innerHTML = `<label class="block text-sm font-medium text-gray-700">Turno</label><select id="hiring-need-shift" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"><option value="">Todos</option>${factory.shifts.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}</select>`;
                     } else {
                         shiftContainer.classList.add('hidden');
                         shiftContainer.innerHTML = '';
@@ -1522,15 +1553,23 @@
                 }
                 
                 try {
+                    let user;
                     if (CANVAS_AUTH_TOKEN) {
                         // Autenticação Específica Gemini
-                        await signInWithCustomToken(auth, CANVAS_AUTH_TOKEN);
+                        user = await signInWithCustomToken(auth, CANVAS_AUTH_TOKEN);
                     } else {
                         // Autenticação Padrão para ambiente externo (login anônimo)
-                        await signInAnonymously(auth);
+                        user = await signInAnonymously(auth);
                     }
-                    console.log(`Firebase user logged in: ${auth.currentUser.uid}`);
+                    const userId = user.user.uid;
+                    console.log(`Firebase user logged in: ${userId}`);
 
+                    // 🚨 NOVO: Define o caminho do Firestore para o espaço privado do usuário/artefato.
+                    // Formato: artifacts/{appId}/users/{userId}/collection/doc
+                    const docPath = `artifacts/${EXPLICIT_ARTIFACT_ID}/users/${userId}/${FIREBASE_COLLECTION}/${FIREBASE_DOC_ID}`;
+                    ORG_DATA_REF = doc(db, docPath);
+                    console.log("Firestore Path FINAL:", docPath);
+                    
                     // 3. Setup real-time listener (This handles loading and setting isAppReady)
                     setupRealtimeListener();
 
@@ -1555,6 +1594,34 @@
                     }
                 }
             }
+
+            /**
+             * Inicializa o documento no Firestore com dados iniciais se não existir.
+             */
+            async function initializeFirstTimeData() {
+                // Tenta carregar localmente primeiro
+                if (loadDataFromLocal()) {
+                    isAppReady = true;
+                    updateUI();
+                    return; // Sai se carregou do local
+                }
+
+                // Se não houver dados locais, usa dados iniciais e tenta salvar (Firebase ou Local)
+                console.log("No local data found. Initializing with default data...");
+                factories = JSON.parse(JSON.stringify(initialFactoriesData));
+                hiringNeeds = JSON.parse(JSON.stringify(initialHiringNeedsData));
+                log = JSON.parse(JSON.stringify(initialLogData));
+
+                // Tenta salvar pela primeira vez (o que irá para o Firebase ou Local)
+                await saveData(true); // Salva silenciosamente
+
+                if (!isAppReady) {
+                    isAppReady = true;
+                    updateUI();
+                }
+                showMessage('Dados iniciais carregados.', 'success');
+            }
+
 
             /**
              * NOVO RELATÓRIO: Agrega entradas e saídas por fábrica e setor.
